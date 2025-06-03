@@ -221,7 +221,7 @@ function BoardContent() {
           <div className="text-red-400 text-xl mb-4">{error}</div>
           <Link
             href="/"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors"
+            className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
           >
             Back to Home
           </Link>
@@ -246,13 +246,13 @@ function BoardContent() {
           <div className="flex space-x-4">
             <button
               onClick={resetGame}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
             >
               New Game
             </button>
             <Link
               href="/"
-              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
             >
               Home
             </Link>

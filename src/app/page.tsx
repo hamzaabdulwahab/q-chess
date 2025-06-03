@@ -133,24 +133,36 @@ export default function Home() {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-amber-400 to-yellow-600 bg-clip-text text-transparent">
-            ♔ Chess Master ♛
-          </h1>
-          <p className="text-gray-400 text-lg">
-            Play chess with advanced game tracking and analysis
+          <div className="relative">
+            <h1 className="text-6xl md:text-7xl font-bold mb-4 bg-gradient-to-r from-amber-400 via-yellow-300 to-orange-400 bg-clip-text text-transparent">
+              ♔ For My Queen ♛
+            </h1>
+            <div className="absolute inset-0 text-6xl md:text-7xl font-bold bg-gradient-to-r from-amber-600 via-yellow-500 to-orange-600 bg-clip-text text-transparent blur-sm opacity-30">
+              ♔ For My Queen ♛
+            </div>
+          </div>
+          <p className="text-amber-200 text-xl font-medium">
+            Elite Chess • Strategic Mastery • Royal Excellence
           </p>
+          <div className="flex justify-center items-center mt-4 space-x-4">
+            <div className="w-16 h-px bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
+            <span className="text-amber-400 text-sm font-semibold">
+              PREMIUM EXPERIENCE
+            </span>
+            <div className="w-16 h-px bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
+          </div>
         </div>
 
         {/* New Game Button */}
         <div className="text-center mb-12">
           <button
             onClick={createNewGame}
-            className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-8 rounded-lg text-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
+            className="bg-gradient-to-r from-amber-600 via-yellow-600 to-orange-600 hover:from-amber-700 hover:via-yellow-700 hover:to-orange-700 text-white font-bold py-5 px-10 rounded-xl text-xl transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-amber-500/30 border border-amber-400/30"
           >
-            🎯 Start New Game
+            ♔ Start New Royal Match ♛
           </button>
-          <p className="text-gray-400 mt-2">
-            Begin a fresh chess match with full game tracking
+          <p className="text-amber-200 mt-3 font-medium tracking-wide">
+            Begin a strategic challenge worthy of royalty
           </p>
         </div>
 
@@ -170,27 +182,32 @@ export default function Home() {
         {/* Games List */}
         <div className="max-w-6xl mx-auto">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">Your Games</h2>
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+              Game Archive
+            </h2>
             <button
               onClick={fetchGames}
-              className="text-blue-400 hover:text-blue-300 transition-colors"
+              className="text-amber-400 hover:text-amber-300 transition-colors flex items-center space-x-2"
             >
-              🔄 Refresh
+              <span>🔄</span>
+              <span>Refresh</span>
             </button>
           </div>
 
           {games.length === 0 ? (
-            <div className="bg-gray-800 border border-gray-600 rounded-lg p-8 text-center">
-              <div className="text-6xl mb-4">♝</div>
-              <h3 className="text-xl font-semibold mb-2">No games yet</h3>
-              <p className="text-gray-400 mb-4">
-                Start your first chess game to see it appear here
+            <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-amber-500/30 rounded-xl p-8 text-center shadow-2xl">
+              <div className="text-7xl mb-4">♔</div>
+              <h3 className="text-2xl font-semibold mb-2 text-amber-300">
+                No games yet
+              </h3>
+              <p className="text-amber-200 mb-6 font-medium">
+                Create your first strategic challenge
               </p>
               <button
                 onClick={createNewGame}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
+                className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-8 py-3 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
-                Create First Game
+                ♔ Create First Match
               </button>
             </div>
           ) : (
@@ -198,11 +215,11 @@ export default function Home() {
               {games.map((game) => (
                 <div
                   key={game.id}
-                  className="bg-gray-800 border border-gray-600 rounded-lg p-6 hover:border-gray-500 transition-colors"
+                  className="bg-gradient-to-br from-gray-800 to-gray-900 border border-amber-500/20 rounded-xl p-6 hover:border-amber-400/50 transition-all duration-300 transform hover:scale-105 shadow-xl hover:shadow-amber-500/20"
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-lg font-semibold mb-1">
+                      <h3 className="text-lg font-semibold mb-1 text-amber-300">
                         Game #{game.id}
                       </h3>
                       <div className="flex items-center space-x-2">
@@ -219,7 +236,7 @@ export default function Home() {
                     </div>
                     <button
                       onClick={() => deleteGame(game.id)}
-                      className="text-red-400 hover:text-red-300 transition-colors text-sm"
+                      className="text-red-400 hover:text-red-300 transition-colors text-sm hover:scale-110 transform"
                       title="Delete game"
                     >
                       🗑️
@@ -256,16 +273,9 @@ export default function Home() {
                   <div className="flex space-x-2">
                     <Link
                       href={`/board?id=${game.id}`}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-center py-2 px-4 rounded-lg transition-colors text-sm font-medium"
+                      className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white text-center py-2 px-4 rounded-lg transition-colors text-sm font-medium"
                     >
                       {game.status === "active" ? "▶️ Resume" : "👁️ View"}
-                    </Link>
-                    <Link
-                      href={`/board`}
-                      className="bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg transition-colors text-sm"
-                      title="New game"
-                    >
-                      ➕
                     </Link>
                   </div>
                 </div>
@@ -273,11 +283,6 @@ export default function Home() {
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <footer className="mt-16 text-center text-gray-500 text-sm">
-          <p>© 2025 Chess Master - Built with Next.js, MySQL, and chess.js</p>
-        </footer>
       </div>
     </div>
   );

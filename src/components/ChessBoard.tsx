@@ -132,29 +132,31 @@ const Square: React.FC<SquareProps> = ({
     switch (moveType) {
       case "capture":
         return (
-          <div className="w-full h-full border-4 border-red-500 rounded-lg opacity-80"></div>
+          <div className="w-full h-full border-4 border-red-500 rounded-full opacity-70 relative">
+            <div className="absolute inset-2 border-2 border-red-400 rounded-full"></div>
+          </div>
         );
       case "castle":
         return (
-          <div className="w-12 h-12 bg-blue-500 rounded-full opacity-70 border-3 border-blue-300 flex items-center justify-center">
-            <div className="text-white font-bold text-lg">♔</div>
+          <div className="w-6 h-6 bg-amber-600 rounded-full opacity-80 border-2 border-amber-400 flex items-center justify-center">
+            <div className="text-white font-bold text-xs">♔</div>
           </div>
         );
       case "enpassant":
         return (
-          <div className="w-10 h-10 bg-purple-500 rounded-full opacity-70 border-3 border-purple-300 flex items-center justify-center">
-            <div className="text-white font-bold text-sm">EP</div>
+          <div className="w-6 h-6 bg-orange-600 rounded-full opacity-80 border-2 border-orange-400 flex items-center justify-center">
+            <div className="text-white font-bold text-xs">EP</div>
           </div>
         );
       case "promotion":
         return (
-          <div className="w-12 h-12 bg-yellow-500 rounded-lg opacity-70 border-3 border-yellow-300 flex items-center justify-center">
-            <div className="text-white font-bold text-lg">♕</div>
+          <div className="w-6 h-6 bg-yellow-600 rounded-lg opacity-80 border-2 border-yellow-400 flex items-center justify-center">
+            <div className="text-white font-bold text-xs">♕</div>
           </div>
         );
       default:
         return (
-          <div className="w-8 h-8 bg-green-500 rounded-full opacity-70"></div>
+          <div className="w-6 h-6 bg-amber-500 rounded-full opacity-75 shadow-md"></div>
         );
     }
   };
@@ -506,11 +508,109 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         <div className="text-2xl font-bold text-white mb-3">
           {gameState.gameOver ? (
             gameState.winner === "draw" ? (
-              <span className="text-yellow-400">🤝 Game ended in a draw</span>
+              <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+                <div className="bg-gradient-to-br from-amber-900 via-yellow-900 to-orange-900 border-4 border-amber-500 rounded-2xl shadow-2xl p-12 max-w-2xl mx-4 text-center">
+                  <div className="text-6xl mb-6">🤝</div>
+                  <h1 className="text-4xl font-bold text-amber-200 mb-4">
+                    HONORABLE DRAW
+                  </h1>
+                  <div className="w-24 h-1 bg-gradient-to-r from-amber-500 to-orange-500 mx-auto mb-4"></div>
+                  <p className="text-xl text-amber-100 mb-6">
+                    A battle of equals, fought with honor and dignity
+                  </p>
+                  <div className="text-amber-300 text-lg italic">
+                    "In chess, as in life, respect is earned through skillful
+                    play"
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="mt-8 flex gap-4 justify-center">
+                    <button
+                      onClick={() => (window.location.href = "/")}
+                      className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105"
+                    >
+                      🏠 Home
+                    </button>
+                    <button
+                      onClick={() => (window.location.href = "/board")}
+                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105"
+                    >
+                      🎯 New Game
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
-              <div className="text-green-400 fixed left-0 top-1/2 translate-y-1/2  bg-white w-screen py-10">
-                👑 {gameState.winner?.charAt(0).toUpperCase()}
-                {gameState.winner?.slice(1)} wins!
+              <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+                <div className="bg-gradient-to-br from-amber-900 via-yellow-800 to-orange-900 border-4 border-amber-400 rounded-3xl shadow-2xl p-16 max-w-3xl mx-4 text-center relative overflow-hidden">
+                  {/* Royal background pattern */}
+                  <div className="absolute inset-0 opacity-10">
+                    <div className="absolute top-4 left-4 text-6xl text-amber-300">
+                      ♔
+                    </div>
+                    <div className="absolute top-4 right-4 text-6xl text-amber-300">
+                      ♛
+                    </div>
+                    <div className="absolute bottom-4 left-4 text-6xl text-amber-300">
+                      ♜
+                    </div>
+                    <div className="absolute bottom-4 right-4 text-6xl text-amber-300">
+                      ♝
+                    </div>
+                  </div>
+
+                  {/* Main content */}
+                  <div className="relative z-10">
+                    <div className="text-8xl mb-8 animate-bounce">
+                      {gameState.winner === "white" ? "♔" : "♛"}
+                    </div>
+                    <h1 className="text-6xl font-bold text-amber-200 mb-6 tracking-wider">
+                      VICTORY ROYAL
+                    </h1>
+                    <div className="w-32 h-2 bg-gradient-to-r from-amber-500 via-yellow-400 to-orange-500 mx-auto mb-6 rounded-full shadow-lg"></div>
+
+                    <div className="text-3xl text-amber-100 mb-6 font-semibold">
+                      {gameState.winner?.charAt(0).toUpperCase()}
+                      {gameState.winner?.slice(1)} Claims the Throne
+                    </div>
+
+                    <div className="bg-black bg-opacity-30 rounded-xl p-6 mb-6 border border-amber-500">
+                      <p className="text-xl text-amber-200 italic leading-relaxed">
+                        "In the game of chess, the queen protects the king.
+                        <br />
+                        In the game of life, the king protects the queen."
+                      </p>
+                    </div>
+
+                    <div className="flex justify-center items-center gap-4 text-lg text-amber-300">
+                      <div className="w-16 h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent"></div>
+                      <span className="font-semibold tracking-widest">
+                        FOR MY QUEEN
+                      </span>
+                      <div className="w-16 h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent"></div>
+                    </div>
+
+                    <div className="mt-8 text-amber-400 text-lg">
+                      A masterpiece of strategic brilliance
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="mt-10 flex gap-4 justify-center">
+                      <button
+                        onClick={() => (window.location.href = "/")}
+                        className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105"
+                      >
+                        🏠 Home
+                      </button>
+                      <button
+                        onClick={() => (window.location.href = "/board")}
+                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105"
+                      >
+                        🎯 New Game
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )
           ) : (

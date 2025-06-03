@@ -60,7 +60,7 @@ export const GameStatusPanel: React.FC<GameStatusPanelProps> = ({
       <div className="mb-6 space-y-2">
         <div className="flex justify-between">
           <span className="text-gray-400">Total turns:</span>
-          <span>{game ? Math.ceil(game.move_count / 2) : 1}</span>
+          <span>{game ? Math.ceil(game.moveCount / 2) : 1}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Current team:</span>

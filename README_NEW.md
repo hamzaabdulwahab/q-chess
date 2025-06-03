@@ -1,4 +1,4 @@
-# ♔ Chess Master - Full-Stack Chess Game
+# ♔ For My Queen - Full-Stack Chess Game
 
 A comprehensive chess web application built with Next.js, TypeScript, MySQL, and chess.js, featuring advanced game tracking, persistence, and a beautiful UI that matches professional chess interfaces.
 

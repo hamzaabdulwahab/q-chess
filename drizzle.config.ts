@@ -1,6 +1,6 @@
-import { defineConfig } from "drizzle-kit";
+import type { Config } from "drizzle-kit";
 
-export default defineConfig({
+export default {
   schema: "./src/lib/db/schema.ts",
   out: "./drizzle",
   dialect: "mysql",
@@ -11,4 +11,4 @@ export default defineConfig({
     database: process.env.DB_NAME || "chess_game",
     port: parseInt(process.env.DB_PORT || "3306"),
   },
-});
+} as Config;
