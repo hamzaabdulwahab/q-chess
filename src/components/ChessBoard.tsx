@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { ChessClient } from "@/lib/chess-client";
+import { soundManager } from "@/lib/sound-manager";
 
 // Helper functions
 const squareToCoords = (square: string): [number, number] => {
@@ -19,6 +20,7 @@ interface ChessBoardProps {
   fen?: string;
   onMove?: (result: any) => void;
   disabled?: boolean;
+  viewMode?: boolean;
 }
 
 interface PieceProps {
@@ -230,6 +232,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   onMove,
   disabled = false,
+  viewMode = false,
 }) => {
   const [chessService, setChessService] = useState<ChessClient>(
     new ChessClient(fen)
@@ -242,6 +245,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     inCheck: false,
     gameOver: false,
     winner: null as string | null,
+    skipEndScreen: false,
   });
   const [pendingMove, setPendingMove] = useState<{
     from: string;
@@ -270,8 +274,24 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         : status.isStalemate || status.isDraw
         ? "draw"
         : null,
+      skipEndScreen: viewMode,
     });
-  }, [fen]);
+
+    // Play game start sound for new games (starting position)
+    if (
+      fen === "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" &&
+      !viewMode
+    ) {
+      soundManager.play("game-start");
+    }
+  }, [fen, viewMode]);
+
+  // Play game end sounds for draws/stalemates
+  useEffect(() => {
+    if (gameState.gameOver && gameState.winner === "draw" && !viewMode) {
+      soundManager.play("game-end");
+    }
+  }, [gameState.gameOver, gameState.winner, viewMode]);
 
   const makeMove = async (from: string, to: string, promotion?: string) => {
     if (gameId) {
@@ -292,12 +312,33 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           const newChessService = new ChessClient(result.fen);
           setChessService(newChessService);
           const status = newChessService.getGameStatus();
+
+          // Get move details before the move was made (using the previous chess service)
+          const moveDetails = chessService.getMoveDetails(from, to, promotion);
+
+          // Determine move characteristics for sound
+          const moveData = {
+            isCapture: Boolean(result.capturedPiece),
+            isCastle: Boolean(
+              moveDetails?.flags.includes("k") ||
+                moveDetails?.flags.includes("q")
+            ),
+            isPromotion: Boolean(promotion || moveDetails?.flags.includes("p")),
+            isCheck: status.isInCheck && result.gameStatus === "active",
+            isCheckmate: result.gameStatus === "checkmate",
+            isIllegal: false,
+          };
+
+          // Play appropriate sound
+          soundManager.playMoveSound(moveData);
+
           setGameState({
             fen: result.fen,
             turn: newChessService.getCurrentTurn(),
-            inCheck: status.isInCheck,
+            inCheck: status.isInCheck && result.gameStatus === "active", // Don't show check if game is over
             gameOver: result.gameStatus !== "active",
             winner: result.winner,
+            skipEndScreen: false,
           });
           setLastMove({ from, to });
 
@@ -306,37 +347,61 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           }
           return { success: true };
         } else {
+          // Play illegal move sound
+          soundManager.play("illegal-move");
           console.error("Move failed:", result.error);
           return { success: false, error: result.error };
         }
       } catch (error) {
+        soundManager.play("illegal-move");
         console.error("Error making move:", error);
         return { success: false, error: "Network error" };
       }
     } else {
       // Local game (no gameId)
+      const moveDetails = chessService.getMoveDetails(from, to, promotion);
       const result = chessService.makeMove(from, to, promotion);
 
       if (result.success) {
         const status = chessService.getGameStatus();
+
+        // Determine move characteristics for sound
+        const moveData = {
+          isCapture: Boolean(result.capturedPiece),
+          isCastle: Boolean(
+            moveDetails?.flags.includes("k") || moveDetails?.flags.includes("q")
+          ),
+          isPromotion: Boolean(promotion || moveDetails?.flags.includes("p")),
+          isCheck: status.isInCheck && !status.isCheckmate,
+          isCheckmate: status.isCheckmate,
+          isIllegal: false,
+        };
+
+        // Play appropriate sound
+        soundManager.playMoveSound(moveData);
+
         setGameState({
           fen: chessService.getFen(),
           turn: chessService.getCurrentTurn(),
-          inCheck: status.isInCheck,
+          inCheck: status.isInCheck && !status.isCheckmate, // Don't show check if it's checkmate
           gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
           winner: status.isCheckmate
             ? status.turn === "white"
-              ? "black"
-              : "white"
+              ? "black" // If white is in checkmate, black wins
+              : "white" // If black is in checkmate, white wins
             : status.isStalemate || status.isDraw
             ? "draw"
             : null,
+          skipEndScreen: false,
         });
         setLastMove({ from, to });
 
         if (onMove) {
           onMove({ success: true, fen: chessService.getFen() });
         }
+      } else {
+        // Play illegal move sound
+        soundManager.play("illegal-move");
       }
       return result;
     }
@@ -506,7 +571,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       {/* Status */}
       <div className="mt-8 text-center">
         <div className="text-2xl font-bold text-white mb-3">
-          {gameState.gameOver ? (
+          {gameState.gameOver && !gameState.skipEndScreen ? (
             gameState.winner === "draw" ? (
               <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
                 <div className="bg-gradient-to-br from-amber-900 via-yellow-900 to-orange-900 border-4 border-amber-500 rounded-2xl shadow-2xl p-12 max-w-2xl mx-4 text-center">
@@ -524,7 +589,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   </div>
 
                   {/* Action buttons */}
-                  <div className="mt-8 flex gap-4 justify-center">
+                  <div className="mt-8 flex gap-4 justify-center flex-wrap">
                     <button
                       onClick={() => (window.location.href = "/")}
                       className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105"
@@ -537,6 +602,16 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                     >
                       🎯 New Game
                     </button>
+                    {gameId && (
+                      <button
+                        onClick={() => {
+                          setGameState({ ...gameState, skipEndScreen: true });
+                        }}
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105"
+                      >
+                        👁️ View Game
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -595,7 +670,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                     </div>
 
                     {/* Action buttons */}
-                    <div className="mt-10 flex gap-4 justify-center">
+                    <div className="mt-10 flex gap-4 justify-center flex-wrap">
                       <button
                         onClick={() => (window.location.href = "/")}
                         className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105"
@@ -608,6 +683,16 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                       >
                         🎯 New Game
                       </button>
+                      {gameId && (
+                        <button
+                          onClick={() => {
+                            setGameState({ ...gameState, skipEndScreen: true });
+                          }}
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105"
+                        >
+                          👁️ View Game
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -623,11 +708,18 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 {gameState.turn.charAt(0).toUpperCase()}
                 {gameState.turn.slice(1)} to move
               </span>
-              {gameState.inCheck && (
+              {gameState.inCheck && !gameState.gameOver && (
                 <div className="text-red-400 mt-2 font-bold animate-pulse">
                   ⚠️ CHECK! ⚠️
                 </div>
               )}
+              {gameState.gameOver &&
+                gameState.winner &&
+                gameState.winner !== "draw" && (
+                  <div className="text-red-600 mt-2 font-bold animate-pulse text-xl">
+                    🏆 CHECKMATE! {gameState.winner.toUpperCase()} WINS! 🏆
+                  </div>
+                )}
             </>
           )}
         </div>

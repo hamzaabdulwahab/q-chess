@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChessBoard } from "@/components/ChessBoard";
 import { GameStatusPanel } from "@/components/GameStatusPanel";
+import { SoundControl } from "@/components/SoundControl";
 import { GameWithMoves } from "@/types/chess";
 import Link from "next/link";
 
@@ -239,6 +240,12 @@ function BoardContent() {
             <p className="text-xl font-medium text-gray-300">
               {gameState.gameStatus === "active"
                 ? `${gameState.currentTurn}'s turn`
+                : gameState.gameStatus === "checkmate"
+                ? "🏆 Checkmate!"
+                : gameState.gameStatus === "stalemate"
+                ? "🤝 Stalemate - Draw"
+                : gameState.gameStatus === "draw"
+                ? "🤝 Draw"
                 : `Game ${gameState.gameStatus}`}
             </p>
           </div>

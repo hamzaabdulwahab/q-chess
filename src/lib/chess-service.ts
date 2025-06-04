@@ -157,7 +157,8 @@ export class ChessService {
 
       if (this.chess.isCheckmate()) {
         gameStatus = "checkmate";
-        winner = player; // The player who just moved wins
+        // The player who just moved wins (they checkmated their opponent)
+        winner = player;
       } else if (this.chess.isStalemate()) {
         gameStatus = "stalemate";
         winner = "draw";
