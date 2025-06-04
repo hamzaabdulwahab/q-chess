@@ -4,7 +4,7 @@ import React from "react";
 import { GameWithMoves } from "@/types/chess";
 
 interface GameStatusPanelProps {
-  game?: GameWithMoves;
+  game?: GameWithMoves | null;
   currentTurn: "white" | "black";
   gameStatus: string;
   moveHistory: string[];
@@ -60,7 +60,7 @@ export const GameStatusPanel: React.FC<GameStatusPanelProps> = ({
       <div className="mb-6 space-y-2">
         <div className="flex justify-between">
           <span className="text-gray-400">Total turns:</span>
-          <span>{game ? Math.ceil(game.moveCount / 2) : 1}</span>
+          <span>{Math.ceil(moveHistory.length / 2) || 1}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Current team:</span>

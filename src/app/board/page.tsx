@@ -3,7 +3,6 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChessBoard } from "@/components/ChessBoard";
-import { GameStatusPanel } from "@/components/GameStatusPanel";
 import { SoundControl } from "@/components/SoundControl";
 import { GameWithMoves } from "@/types/chess";
 import Link from "next/link";
@@ -266,7 +265,7 @@ function BoardContent() {
           </div>
         </div>
 
-        {/* Chess Board Only - Centered */}
+        {/* Chess Board - Centered */}
         <div className="flex justify-center">
           <ChessBoard
             gameId={gameId ? parseInt(gameId) : undefined}

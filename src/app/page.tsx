@@ -11,6 +11,7 @@ interface Game {
   created_at: Date;
   updated_at: Date;
   winner?: string;
+  totalMoves: number;
 }
 
 export default function Home() {
@@ -246,7 +247,7 @@ export default function Home() {
                   <div className="space-y-2 mb-4 text-sm text-gray-400">
                     <div className="flex justify-between">
                       <span>Moves:</span>
-                      <span>{game.move_count}</span>
+                      <span>{game.totalMoves}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Current turn:</span>
