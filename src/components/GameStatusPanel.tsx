@@ -12,18 +12,11 @@ interface GameStatusPanelProps {
 }
 
 export const GameStatusPanel: React.FC<GameStatusPanelProps> = ({
-  game,
   currentTurn,
   gameStatus,
   moveHistory,
   capturedPieces,
 }) => {
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-  };
-
   const pieceSymbols: { [key: string]: string } = {
     p: "♟",
     r: "♜",

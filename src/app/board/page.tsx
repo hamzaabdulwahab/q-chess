@@ -1,17 +1,37 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChessBoard } from "@/components/ChessBoard";
-import { SoundControl } from "@/components/SoundControl";
-import { GameWithMoves } from "@/types/chess";
 import Link from "next/link";
+
+const extractCapturedPieces = (
+  moves: Array<{ move_notation: string; player: string }>
+) => {
+  // This is a simplified version - in a real implementation,
+  // you'd track captures more accurately
+  const captured = { white: [] as string[], black: [] as string[] };
+
+  moves.forEach((move) => {
+    // Check if move notation indicates capture (contains 'x')
+    if (move.move_notation.includes("x")) {
+      // This is simplified - you'd need more logic to determine what piece was captured
+      const piece = "p"; // placeholder
+      if (move.player === "white") {
+        captured.black.push(piece);
+      } else {
+        captured.white.push(piece);
+      }
+    }
+  });
+
+  return captured;
+};
 
 function BoardContent() {
   const searchParams = useSearchParams();
   const gameId = searchParams.get("id");
 
-  const [game, setGame] = useState<GameWithMoves | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gameState, setGameState] = useState({
@@ -22,53 +42,7 @@ function BoardContent() {
     capturedPieces: { white: [] as string[], black: [] as string[] },
   });
 
-  useEffect(() => {
-    if (gameId) {
-      // Check if the entire string is a valid integer (not just the prefix)
-      const isValidInteger = /^\d+$/.test(gameId);
-      const parsedGameId = parseInt(gameId);
-
-      if (isValidInteger && !isNaN(parsedGameId) && parsedGameId > 0) {
-        loadGame(parsedGameId);
-      } else {
-        console.warn(`Invalid game ID in URL: ${gameId}, creating new game`);
-        createNewGame();
-      }
-    } else {
-      // No game ID provided, create a new game
-      createNewGame();
-    }
-  }, [gameId]);
-
-  const createNewGame = async () => {
-    try {
-      setLoading(true);
-      console.log("Creating new game...");
-      const response = await fetch("/api/games", {
-        method: "POST",
-      });
-      const data = await response.json();
-      console.log(data, "Data");
-
-      console.log("New game response:", response.status, data);
-
-      if (response.ok) {
-        // Update URL with new game ID
-        window.history.replaceState({}, "", `/board?id=${data.gameId}`);
-        // Load the game without recursive call
-        await loadGameData(data.gameId);
-      } else {
-        setError(data.error || "Failed to create game");
-        setLoading(false);
-      }
-    } catch (err) {
-      setError("Failed to create game");
-      setLoading(false);
-      console.error("Error creating game:", err);
-    }
-  };
-
-  const loadGameData = async (id: number) => {
+  const loadGameData = useCallback(async (id: number) => {
     try {
       console.log(`Loading game data for ${id}...`);
       const response = await fetch(`/api/games/${id}`);
@@ -77,11 +51,9 @@ function BoardContent() {
       console.log(`Game ${id} data response:`, response.status, data);
 
       if (response.ok) {
-        setGame(data.game);
-
         // Parse move history to extract captured pieces and move notations
         const moveHistory = data.game.moves.map(
-          (move: any) => move.move_notation
+          (move: { move_notation: string }) => move.move_notation
         );
         const capturedPieces = extractCapturedPieces(data.game.moves);
 
@@ -105,84 +77,147 @@ function BoardContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadGame = async (id: number) => {
-    // Validate that id is a valid number
-    if (!id || isNaN(id) || !Number.isInteger(id) || id <= 0) {
-      console.warn(`Invalid game ID: ${id}, creating new game`);
-      createNewGame();
-      return;
-    }
-
+  const createNewGame = useCallback(async () => {
     try {
       setLoading(true);
-      console.log(`Loading game ${id}...`);
-      const response = await fetch(`/api/games/${id}`);
+      console.log("Creating new game...");
+      const response = await fetch("/api/games", {
+        method: "POST",
+      });
       const data = await response.json();
+      console.log(data, "Data");
 
-      console.log(`Game ${id} response:`, response.status, data);
+      console.log("New game response:", response.status, data);
 
       if (response.ok) {
-        setGame(data.game);
+        // Update URL with new game ID
+        window.history.replaceState({}, "", `/board?id=${data.gameId}`);
+        // Load the game data inline to avoid dependency issues
+        try {
+          console.log(`Loading game data for ${data.gameId}...`);
+          const gameResponse = await fetch(`/api/games/${data.gameId}`);
+          const gameData = await gameResponse.json();
 
-        // Parse move history to extract captured pieces and move notations
-        const moveHistory = data.game.moves.map(
-          (move: any) => move.move_notation
-        );
-        const capturedPieces = extractCapturedPieces(data.game.moves);
+          if (gameResponse.ok) {
+            const moveHistory = gameData.game.moves.map(
+              (move: { move_notation: string }) => move.move_notation
+            );
+            const capturedPieces = extractCapturedPieces(gameData.game.moves);
 
-        const newGameState = {
-          fen: data.game.fen,
-          currentTurn: data.game.current_player,
-          gameStatus: data.game.status,
-          moveHistory,
-          capturedPieces,
-        };
+            const newGameState = {
+              fen: gameData.game.fen,
+              currentTurn: gameData.game.current_player,
+              gameStatus: gameData.game.status,
+              moveHistory,
+              capturedPieces,
+            };
 
-        console.log("Setting game state:", newGameState);
-        setGameState(newGameState);
-        setError(null);
-        setLoading(false);
+            setGameState(newGameState);
+            setError(null);
+          } else {
+            throw new Error(`Failed to load game: ${gameData.error}`);
+          }
+        } catch (err) {
+          console.error(`Error loading game data for ${data.gameId}:`, err);
+          setError(`Failed to load game ${data.gameId}`);
+        } finally {
+          setLoading(false);
+        }
       } else {
-        // Game not found, create a new one instead
-        console.warn(`Game ${id} not found, creating new game`);
-        createNewGame();
+        setError(data.error || "Failed to create game");
+        setLoading(false);
       }
     } catch (err) {
-      console.warn(`Error loading game ${id}, creating new game:`, err);
+      setError("Failed to create game");
+      setLoading(false);
+      console.error("Error creating game:", err);
+    }
+  }, []);
+
+  const loadGame = useCallback(
+    async (id: number) => {
+      // Validate that id is a valid number
+      if (!id || isNaN(id) || !Number.isInteger(id) || id <= 0) {
+        console.warn(`Invalid game ID: ${id}, creating new game`);
+        createNewGame();
+        return;
+      }
+
+      try {
+        setLoading(true);
+        console.log(`Loading game ${id}...`);
+        const response = await fetch(`/api/games/${id}`);
+        const data = await response.json();
+
+        console.log(`Game ${id} response:`, response.status, data);
+
+        if (response.ok) {
+          // Parse move history to extract captured pieces and move notations
+          const moveHistory = data.game.moves.map(
+            (move: { move_notation: string }) => move.move_notation
+          );
+          const capturedPieces = extractCapturedPieces(data.game.moves);
+
+          const newGameState = {
+            fen: data.game.fen,
+            currentTurn: data.game.current_player,
+            gameStatus: data.game.status,
+            moveHistory,
+            capturedPieces,
+          };
+
+          console.log("Setting game state:", newGameState);
+          setGameState(newGameState);
+          setError(null);
+          setLoading(false);
+        } else {
+          // Game not found, create a new one instead
+          console.warn(`Game ${id} not found, creating new game`);
+          createNewGame();
+        }
+      } catch (err) {
+        console.warn(`Error loading game ${id}, creating new game:`, err);
+        createNewGame();
+      }
+    },
+    [createNewGame]
+  );
+
+  useEffect(() => {
+    if (gameId) {
+      // Check if the entire string is a valid integer (not just the prefix)
+      const isValidInteger = /^\d+$/.test(gameId);
+      const parsedGameId = parseInt(gameId);
+
+      if (isValidInteger && !isNaN(parsedGameId) && parsedGameId > 0) {
+        loadGame(parsedGameId);
+      } else {
+        console.warn(`Invalid game ID in URL: ${gameId}, creating new game`);
+        createNewGame();
+      }
+    } else {
+      // No game ID provided, create a new game
       createNewGame();
     }
-  };
+  }, [gameId, createNewGame, loadGame]);
 
-  const extractCapturedPieces = (moves: any[]) => {
-    // This is a simplified version - in a real implementation,
-    // you'd track captures more accurately
-    const captured = { white: [] as string[], black: [] as string[] };
-
-    moves.forEach((move) => {
-      // Check if move notation indicates capture (contains 'x')
-      if (move.move_notation.includes("x")) {
-        // This is simplified - you'd need more logic to determine what piece was captured
-        const piece = "p"; // placeholder
-        if (move.player === "white") {
-          captured.black.push(piece);
-        } else {
-          captured.white.push(piece);
-        }
-      }
-    });
-
-    return captured;
-  };
-
-  const handleMove = (result: any) => {
+  const handleMove = (result: {
+    success: boolean;
+    fen: string;
+    gameStatus?: string;
+    move?: string;
+  }) => {
     if (result.success) {
       setGameState((prev) => ({
         fen: result.fen,
         currentTurn: prev.currentTurn === "white" ? "black" : "white",
         gameStatus: result.gameStatus || "active",
-        moveHistory: [...prev.moveHistory, result.move],
+        moveHistory: [
+          ...prev.moveHistory,
+          ...(result.move ? [result.move] : []),
+        ],
         capturedPieces: prev.capturedPieces, // Would update based on captures
       }));
 

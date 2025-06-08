@@ -1,16 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { ChessClient } from "@/lib/chess-client";
 import { soundManager } from "@/lib/sound-manager";
 
 // Helper functions
-const squareToCoords = (square: string): [number, number] => {
-  const file = square.charCodeAt(0) - 97; // a-h -> 0-7
-  const rank = parseInt(square[1]) - 1; // 1-8 -> 0-7
-  return [file, rank];
-};
-
 const coordsToSquare = (file: number, rank: number): string => {
   return String.fromCharCode(97 + file) + (rank + 1);
 };
@@ -18,17 +13,21 @@ const coordsToSquare = (file: number, rank: number): string => {
 interface ChessBoardProps {
   gameId?: number;
   fen?: string;
-  onMove?: (result: any) => void;
+  onMove?: (result: {
+    success: boolean;
+    fen: string;
+    gameStatus?: string;
+    move?: string;
+  }) => void;
   disabled?: boolean;
   viewMode?: boolean;
 }
 
 interface PieceProps {
   piece: string;
-  className?: string;
 }
 
-const Piece: React.FC<PieceProps> = ({ piece, className = "" }) => {
+const Piece: React.FC<PieceProps> = ({ piece }) => {
   // Map pieces to image filenames
   const pieceImages: { [key: string]: string } = {
     wK: "white-king.png",
@@ -66,9 +65,11 @@ const Piece: React.FC<PieceProps> = ({ piece, className = "" }) => {
 
   return (
     <div className="flex items-center justify-center w-full h-full select-none pointer-events-none">
-      <img
+      <Image
         src={imagePath}
         alt={piece}
+        width={97}
+        height={97}
         className="chess-piece-image"
         onError={(e) => {
           // Fallback to Unicode symbols if image fails to load
@@ -91,7 +92,7 @@ const Piece: React.FC<PieceProps> = ({ piece, className = "" }) => {
 interface SquareProps {
   rank: number;
   file: number;
-  piece?: any;
+  piece?: string | null;
   isLight: boolean;
   isSelected: boolean;
   isHighlighted: boolean;
@@ -103,8 +104,6 @@ interface SquareProps {
 }
 
 const Square: React.FC<SquareProps> = ({
-  rank,
-  file,
   piece,
   isLight,
   isSelected,
@@ -255,7 +254,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(
     null
   );
-  const [moveDetails, setMoveDetails] = useState<any[]>([]);
 
   // Initialize chess service when fen changes
   useEffect(() => {
@@ -293,28 +291,84 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     }
   }, [gameState.gameOver, gameState.winner, viewMode]);
 
-  const makeMove = async (from: string, to: string, promotion?: string) => {
-    if (gameId) {
-      try {
-        const response = await fetch(`/api/games/${gameId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from,
-            to,
-            promotion,
-          }),
-        });
+  const makeMove = useCallback(
+    async (from: string, to: string, promotion?: string) => {
+      if (gameId) {
+        try {
+          const response = await fetch(`/api/games/${gameId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from,
+              to,
+              promotion,
+            }),
+          });
 
-        const result = await response.json();
+          const result = await response.json();
+
+          if (result.success) {
+            const newChessService = new ChessClient(result.fen);
+            setChessService(newChessService);
+            const status = newChessService.getGameStatus();
+
+            // Get move details before the move was made (using the previous chess service)
+            const moveDetails = chessService.getMoveDetails(
+              from,
+              to,
+              promotion
+            );
+
+            // Determine move characteristics for sound
+            const moveData = {
+              isCapture: Boolean(result.capturedPiece),
+              isCastle: Boolean(
+                moveDetails?.flags.includes("k") ||
+                  moveDetails?.flags.includes("q")
+              ),
+              isPromotion: Boolean(
+                promotion || moveDetails?.flags.includes("p")
+              ),
+              isCheck: status.isInCheck && result.gameStatus === "active",
+              isCheckmate: result.gameStatus === "checkmate",
+              isIllegal: false,
+            };
+
+            // Play appropriate sound
+            soundManager.playMoveSound(moveData);
+
+            setGameState({
+              fen: result.fen,
+              turn: newChessService.getCurrentTurn(),
+              inCheck: status.isInCheck && result.gameStatus === "active", // Don't show check if game is over
+              gameOver: result.gameStatus !== "active",
+              winner: result.winner,
+              skipEndScreen: false,
+            });
+            setLastMove({ from, to });
+
+            if (onMove) {
+              onMove(result);
+            }
+            return { success: true };
+          } else {
+            // Play illegal move sound
+            soundManager.play("illegal-move");
+            console.error("Move failed:", result.error);
+            return { success: false, error: result.error };
+          }
+        } catch (error) {
+          soundManager.play("illegal-move");
+          console.error("Error making move:", error);
+          return { success: false, error: "Network error" };
+        }
+      } else {
+        // Local game (no gameId)
+        const moveDetails = chessService.getMoveDetails(from, to, promotion);
+        const result = chessService.makeMove(from, to, promotion);
 
         if (result.success) {
-          const newChessService = new ChessClient(result.fen);
-          setChessService(newChessService);
-          const status = newChessService.getGameStatus();
-
-          // Get move details before the move was made (using the previous chess service)
-          const moveDetails = chessService.getMoveDetails(from, to, promotion);
+          const status = chessService.getGameStatus();
 
           // Determine move characteristics for sound
           const moveData = {
@@ -324,8 +378,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 moveDetails?.flags.includes("q")
             ),
             isPromotion: Boolean(promotion || moveDetails?.flags.includes("p")),
-            isCheck: status.isInCheck && result.gameStatus === "active",
-            isCheckmate: result.gameStatus === "checkmate",
+            isCheck: status.isInCheck && !status.isCheckmate,
+            isCheckmate: status.isCheckmate,
             isIllegal: false,
           };
 
@@ -333,89 +387,46 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           soundManager.playMoveSound(moveData);
 
           setGameState({
-            fen: result.fen,
-            turn: newChessService.getCurrentTurn(),
-            inCheck: status.isInCheck && result.gameStatus === "active", // Don't show check if game is over
-            gameOver: result.gameStatus !== "active",
-            winner: result.winner,
+            fen: chessService.getFen(),
+            turn: chessService.getCurrentTurn(),
+            inCheck: status.isInCheck && !status.isCheckmate, // Don't show check if it's checkmate
+            gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
+            winner: status.isCheckmate
+              ? status.turn === "white"
+                ? "black" // If white is in checkmate, black wins
+                : "white" // If black is in checkmate, white wins
+              : status.isStalemate || status.isDraw
+              ? "draw"
+              : null,
             skipEndScreen: false,
           });
           setLastMove({ from, to });
 
           if (onMove) {
-            onMove(result);
+            onMove({ success: true, fen: chessService.getFen() });
           }
-          return { success: true };
         } else {
           // Play illegal move sound
           soundManager.play("illegal-move");
-          console.error("Move failed:", result.error);
-          return { success: false, error: result.error };
         }
-      } catch (error) {
-        soundManager.play("illegal-move");
-        console.error("Error making move:", error);
-        return { success: false, error: "Network error" };
+        return result;
       }
-    } else {
-      // Local game (no gameId)
-      const moveDetails = chessService.getMoveDetails(from, to, promotion);
-      const result = chessService.makeMove(from, to, promotion);
+    },
+    [gameId, chessService, onMove]
+  );
 
-      if (result.success) {
-        const status = chessService.getGameStatus();
+  const isPromotionMove = useCallback(
+    (from: string, to: string): boolean => {
+      const piece = chessService.getPiece(from);
+      if (!piece || piece.charAt(1) !== "P") return false; // Not a pawn
 
-        // Determine move characteristics for sound
-        const moveData = {
-          isCapture: Boolean(result.capturedPiece),
-          isCastle: Boolean(
-            moveDetails?.flags.includes("k") || moveDetails?.flags.includes("q")
-          ),
-          isPromotion: Boolean(promotion || moveDetails?.flags.includes("p")),
-          isCheck: status.isInCheck && !status.isCheckmate,
-          isCheckmate: status.isCheckmate,
-          isIllegal: false,
-        };
+      const toRank = parseInt(to.charAt(1));
+      const isWhitePawn = piece.charAt(0) === "w";
 
-        // Play appropriate sound
-        soundManager.playMoveSound(moveData);
-
-        setGameState({
-          fen: chessService.getFen(),
-          turn: chessService.getCurrentTurn(),
-          inCheck: status.isInCheck && !status.isCheckmate, // Don't show check if it's checkmate
-          gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
-          winner: status.isCheckmate
-            ? status.turn === "white"
-              ? "black" // If white is in checkmate, black wins
-              : "white" // If black is in checkmate, white wins
-            : status.isStalemate || status.isDraw
-            ? "draw"
-            : null,
-          skipEndScreen: false,
-        });
-        setLastMove({ from, to });
-
-        if (onMove) {
-          onMove({ success: true, fen: chessService.getFen() });
-        }
-      } else {
-        // Play illegal move sound
-        soundManager.play("illegal-move");
-      }
-      return result;
-    }
-  };
-
-  const isPromotionMove = (from: string, to: string): boolean => {
-    const piece = chessService.getPiece(from);
-    if (!piece || piece.charAt(1) !== "P") return false; // Not a pawn
-
-    const toRank = parseInt(to.charAt(1));
-    const isWhitePawn = piece.charAt(0) === "w";
-
-    return (isWhitePawn && toRank === 8) || (!isWhitePawn && toRank === 1);
-  };
+      return (isWhitePawn && toRank === 8) || (!isWhitePawn && toRank === 1);
+    },
+    [chessService]
+  );
 
   const handlePromotionSelect = async (piece: string) => {
     setShowPromotionModal(false);
@@ -584,8 +595,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                     A battle of equals, fought with honor and dignity
                   </p>
                   <div className="text-amber-300 text-lg italic">
-                    "In chess, as in life, respect is earned through skillful
-                    play"
+                    &quot;In chess, as in life, respect is earned through
+                    skillful play&quot;
                   </div>
 
                   {/* Action buttons */}
@@ -651,9 +662,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
                     <div className="bg-black bg-opacity-30 rounded-xl p-6 mb-6 border border-amber-500">
                       <p className="text-xl text-amber-200 italic leading-relaxed">
-                        "In the game of chess, the queen protects the king.
+                        &quot;In the game of chess, the queen protects the king.
                         <br />
-                        In the game of life, the king protects the queen."
+                        In the game of life, the king protects the queen.&quot;
                       </p>
                     </div>
 

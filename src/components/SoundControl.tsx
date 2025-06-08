@@ -45,7 +45,18 @@ export const SoundControl: React.FC<SoundControlProps> = ({
   };
 
   const testSound = (soundType: string) => {
-    soundManager.play(soundType as any);
+    soundManager.play(
+      soundType as
+        | "move"
+        | "capture"
+        | "check"
+        | "checkmate"
+        | "castle"
+        | "promotion"
+        | "game-start"
+        | "game-end"
+        | "illegal-move"
+    );
   };
 
   return (

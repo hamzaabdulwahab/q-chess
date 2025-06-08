@@ -11,22 +11,25 @@ export class ChessClient {
   getPossibleMoves(square: string): string[] {
     try {
       const moves = this.chess.moves({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         square: square as any,
         verbose: true,
       });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return moves.map((move: any) => move.to);
-    } catch (error) {
-      console.error("Error getting possible moves:", error);
+    } catch {
+      console.error("Error getting possible moves");
       return [];
     }
   }
 
   // Get all legal moves with detailed information
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getAllMovesDetailed(): any[] {
     try {
       return this.chess.moves({ verbose: true });
-    } catch (error) {
-      console.error("Error getting detailed moves:", error);
+    } catch {
+      console.error("Error getting detailed moves");
       return [];
     }
   }
@@ -39,25 +42,28 @@ export class ChessClient {
       const move = testChess.move({
         from,
         to,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         promotion: promotion as any,
       });
       return move !== null;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
   // Get move details (including special move flags)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getMoveDetails(from: string, to: string, promotion?: string): any {
     try {
       const moves = this.chess.moves({ verbose: true });
       return moves.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (move: any) =>
           move.from === from &&
           move.to === to &&
           (!promotion || move.promotion === promotion)
       );
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -83,6 +89,7 @@ export class ChessClient {
       const move = this.chess.move({
         from,
         to,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         promotion: promotion as any,
       });
 
@@ -187,6 +194,7 @@ export class ChessClient {
 
   // Get piece at square
   getPiece(square: string): string | null {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const piece = this.chess.get(square as any);
     if (!piece) return null;
     return piece.color + piece.type.toUpperCase();
