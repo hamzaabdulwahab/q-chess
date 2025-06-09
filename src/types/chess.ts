@@ -27,7 +27,6 @@ export interface Move {
   isPromotion: number;
   createdAt: Date;
 }
-
 export interface GameStats {
   totalGames: number;
   activeGames: number;
