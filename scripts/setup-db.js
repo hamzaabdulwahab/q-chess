@@ -114,7 +114,6 @@ async function initializeDatabase() {
     LEFT JOIN moves m ON g.id = m.game_id
     GROUP BY g.id
     ORDER BY g.updated_at DESC
-    LIMIT 20
   ) AS recent_sub
 `);
 
