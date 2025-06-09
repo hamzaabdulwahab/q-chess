@@ -14,7 +14,7 @@ Complete MySQL schema with all tables, views, stored procedures, functions, and 
 
 Node.js script that programmatically creates the database schema and initializes the application.
 
-### 3. `src/lib/database-simple.ts`
+### 3. `src/lib/database.ts`
 
 TypeScript module that manages database connections using MySQL2 connection pooling.
 
@@ -23,7 +23,7 @@ TypeScript module that manages database connections using MySQL2 connection pool
 ### Connection Management
 
 ```typescript
-// File: src/lib/database-simple.ts
+// File: src/lib/database.ts
 import mysql from "mysql2/promise";
 
 export const pool = mysql.createPool({

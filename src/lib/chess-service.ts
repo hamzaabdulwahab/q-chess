@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import { pool } from "@/lib/database-simple";
+import { pool } from "@/lib/database";
 import { Game, Move, GameWithMoves } from "@/types/chess";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 
@@ -135,7 +135,9 @@ export class ChessService {
   }> {
     try {
       const fenBefore = this.chess.fen();
-      const moveNumber = Math.ceil(this.chess.history().length / 2) + 1;
+      const historyLength = this.chess.history().length;
+      // Chess move numbering: Move 1 = white's 1st move, Move 1 = black's 1st move, Move 2 = white's 2nd move, etc.
+      const moveNumber = Math.floor(historyLength / 2) + 1;
       const player = this.chess.turn() === "w" ? "white" : "black";
 
       // Attempt to make the move

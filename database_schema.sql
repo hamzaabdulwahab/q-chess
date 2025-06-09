@@ -1,9 +1,3 @@
--- =====================================================
--- CHESS GAME DATABASE SCHEMA
--- MySQL Database Implementation for Chess Application
--- Created: June 4, 2025
--- =====================================================
-
 -- Create database if it doesn't exist
 CREATE DATABASE IF NOT EXISTS chess_game;
 USE chess_game;
@@ -137,12 +131,13 @@ BEGIN
     INSERT INTO moves (game_id, move_number, player, move_notation, fen_before, fen_after)
     VALUES (p_game_id, p_move_number, p_player, p_move_notation, p_fen_before, p_fen_after);
     
+    -- Update game state with correct move count
     UPDATE games 
     SET 
         fen = p_fen_after,
         pgn = p_pgn,
         current_player = CASE WHEN p_player = 'white' THEN 'black' ELSE 'white' END,
-        move_count = p_move_number,
+        move_count = (SELECT COUNT(*) FROM moves WHERE game_id = p_game_id), 
         updated_at = CURRENT_TIMESTAMP
     WHERE id = p_game_id;
 END //

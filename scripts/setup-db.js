@@ -100,36 +100,39 @@ async function initializeDatabase() {
 
     // Create views
     await connection.execute(`
-      CREATE OR REPLACE VIEW recent_games AS
-      SELECT 
-        g.id,
-        g.status,
-        g.current_player,
-        g.winner,
-        g.created_at,
-        g.updated_at,
-        g.move_count,
-        COUNT(m.id) as total_moves
-      FROM games g
-      LEFT JOIN moves m ON g.id = m.game_id
-      GROUP BY g.id
-      ORDER BY g.updated_at DESC
-      LIMIT 20
-    `);
+  CREATE OR REPLACE VIEW recent_games AS
+  SELECT * FROM (
+    SELECT 
+      g.id,
+      g.status,
+      g.current_player,
+      g.winner,
+      g.created_at,
+      g.updated_at,
+      COUNT(m.id) AS total_moves
+    FROM games g
+    LEFT JOIN moves m ON g.id = m.game_id
+    GROUP BY g.id
+    ORDER BY g.updated_at DESC
+    LIMIT 20
+  ) AS recent_sub
+`);
 
     await connection.execute(`
-      CREATE OR REPLACE VIEW ongoing_games AS
-      SELECT 
-        g.id,
-        g.fen,
-        g.current_player,
-        g.created_at,
-        g.updated_at,
-        g.move_count
-      FROM games g
-      WHERE g.status = 'active'
-      ORDER BY g.updated_at DESC
-    `);
+  CREATE OR REPLACE VIEW ongoing_games AS
+  SELECT * FROM (
+    SELECT 
+      g.id,
+      g.fen,
+      g.current_player,
+      g.created_at,
+      g.updated_at,
+      g.move_count
+    FROM games g
+    WHERE g.status = 'active'
+    ORDER BY g.updated_at DESC
+  ) AS ongoing_sub
+`);
 
     await connection.execute(`
       CREATE OR REPLACE VIEW game_statistics AS
@@ -181,7 +184,7 @@ async function initializeDatabase() {
           fen = p_fen_after,
           pgn = p_pgn,
           current_player = CASE WHEN p_player = 'white' THEN 'black' ELSE 'white' END,
-          move_count = p_move_number,
+          move_count = (SELECT COUNT(*) FROM moves WHERE game_id = p_game_id),
           updated_at = CURRENT_TIMESTAMP
         WHERE id = p_game_id;
       END
