@@ -1,39 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useCallback } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChessBoard } from "@/components/ChessBoard";
+import { GameStatus } from "@/types/chess";
 import Link from "next/link";
-
-const extractCapturedPieces = (
-  moves: Array<{ move_notation: string; player: string }>
-) => {
-  // This is a simplified version - in a real implementation,
-  // you'd track captures more accurately
-  const captured = { white: [] as string[], black: [] as string[] };
-
-  moves.forEach((move) => {
-    // Check if move notation indicates capture (contains 'x')
-    if (move.move_notation.includes("x")) {
-      // This is simplified - you'd need more logic to determine what piece was captured
-      const piece = "p"; // placeholder
-      if (move.player === "white") {
-        captured.black.push(piece);
-      } else {
-        captured.white.push(piece);
-      }
-    }
-  });
-
-  return captured;
-};
 
 function BoardContent() {
   const searchParams = useSearchParams();
   const gameId = searchParams.get("id");
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [gameState, setGameState] = useState({
     fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     currentTurn: "white" as "white" | "black",
@@ -42,166 +18,13 @@ function BoardContent() {
     capturedPieces: { white: [] as string[], black: [] as string[] },
   });
 
-  const loadGameData = useCallback(async (id: number) => {
-    try {
-      console.log(`Loading game data for ${id}...`);
-      const response = await fetch(`/api/games/${id}`);
-      const data = await response.json();
-
-      console.log(`Game ${id} data response:`, response.status, data);
-
-      if (response.ok) {
-        // Parse move history to extract captured pieces and move notations
-        const moveHistory = data.game.moves.map(
-          (move: { move_notation: string }) => move.move_notation
-        );
-        const capturedPieces = extractCapturedPieces(data.game.moves);
-
-        const newGameState = {
-          fen: data.game.fen,
-          currentTurn: data.game.current_player,
-          gameStatus: data.game.status,
-          moveHistory,
-          capturedPieces,
-        };
-
-        console.log("Setting game state:", newGameState);
-        setGameState(newGameState);
-        setError(null);
-      } else {
-        throw new Error(`Failed to load game: ${data.error}`);
-      }
-    } catch (err) {
-      console.error(`Error loading game data for ${id}:`, err);
-      setError(`Failed to load game ${id}`);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const createNewGame = useCallback(async () => {
-    try {
-      setLoading(true);
-      console.log("Creating new game...");
-      const response = await fetch("/api/games", {
-        method: "POST",
-      });
-      const data = await response.json();
-      console.log(data, "Data");
-
-      console.log("New game response:", response.status, data);
-
-      if (response.ok) {
-        // Update URL with new game ID
-        window.history.replaceState({}, "", `/board?id=${data.gameId}`);
-        // Load the game data inline to avoid dependency issues
-        try {
-          console.log(`Loading game data for ${data.gameId}...`);
-          const gameResponse = await fetch(`/api/games/${data.gameId}`);
-          const gameData = await gameResponse.json();
-
-          if (gameResponse.ok) {
-            const moveHistory = gameData.game.moves.map(
-              (move: { move_notation: string }) => move.move_notation
-            );
-            const capturedPieces = extractCapturedPieces(gameData.game.moves);
-
-            const newGameState = {
-              fen: gameData.game.fen,
-              currentTurn: gameData.game.current_player,
-              gameStatus: gameData.game.status,
-              moveHistory,
-              capturedPieces,
-            };
-
-            setGameState(newGameState);
-            setError(null);
-          } else {
-            throw new Error(`Failed to load game: ${gameData.error}`);
-          }
-        } catch (err) {
-          console.error(`Error loading game data for ${data.gameId}:`, err);
-          setError(`Failed to load game ${data.gameId}`);
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        setError(data.error || "Failed to create game");
-        setLoading(false);
-      }
-    } catch (err) {
-      setError("Failed to create game");
-      setLoading(false);
-      console.error("Error creating game:", err);
-    }
-  }, []);
-
-  const loadGame = useCallback(
-    async (id: number) => {
-      // Validate that id is a valid number
-      if (!id || isNaN(id) || !Number.isInteger(id) || id <= 0) {
-        console.warn(`Invalid game ID: ${id}, creating new game`);
-        createNewGame();
-        return;
-      }
-
-      try {
-        setLoading(true);
-        console.log(`Loading game ${id}...`);
-        const response = await fetch(`/api/games/${id}`);
-        const data = await response.json();
-
-        console.log(`Game ${id} response:`, response.status, data);
-
-        if (response.ok) {
-          // Parse move history to extract captured pieces and move notations
-          const moveHistory = data.game.moves.map(
-            (move: { move_notation: string }) => move.move_notation
-          );
-          const capturedPieces = extractCapturedPieces(data.game.moves);
-
-          const newGameState = {
-            fen: data.game.fen,
-            currentTurn: data.game.current_player,
-            gameStatus: data.game.status,
-            moveHistory,
-            capturedPieces,
-          };
-
-          console.log("Setting game state:", newGameState);
-          setGameState(newGameState);
-          setError(null);
-          setLoading(false);
-        } else {
-          // Game not found, create a new one instead
-          console.warn(`Game ${id} not found, creating new game`);
-          createNewGame();
-        }
-      } catch (err) {
-        console.warn(`Error loading game ${id}, creating new game:`, err);
-        createNewGame();
-      }
-    },
-    [createNewGame]
-  );
-
-  useEffect(() => {
-    if (gameId) {
-      // Check if the entire string is a valid integer (not just the prefix)
-      const isValidInteger = /^\d+$/.test(gameId);
-      const parsedGameId = parseInt(gameId);
-
-      if (isValidInteger && !isNaN(parsedGameId) && parsedGameId > 0) {
-        loadGame(parsedGameId);
-      } else {
-        console.warn(`Invalid game ID in URL: ${gameId}, creating new game`);
-        createNewGame();
-      }
-    } else {
-      // No game ID provided, create a new game
-      createNewGame();
-    }
-  }, [gameId, createNewGame, loadGame]);
+  const [gameStatusInfo, setGameStatusInfo] = useState<GameStatus>({
+    isCheckmate: false,
+    isStalemate: false,
+    isDraw: false,
+    isInCheck: false,
+    turn: "white",
+  });
 
   const handleMove = (result: {
     success: boolean;
@@ -211,103 +34,198 @@ function BoardContent() {
   }) => {
     if (result.success) {
       setGameState((prev) => ({
+        ...prev,
         fen: result.fen,
         currentTurn: prev.currentTurn === "white" ? "black" : "white",
-        gameStatus: result.gameStatus || "active",
-        moveHistory: [
-          ...prev.moveHistory,
-          ...(result.move ? [result.move] : []),
-        ],
-        capturedPieces: prev.capturedPieces, // Would update based on captures
+        moveHistory: result.move
+          ? [...prev.moveHistory, result.move]
+          : prev.moveHistory,
       }));
-
-      // Reload game data to ensure sync
-      if (gameId) {
-        setTimeout(() => loadGameData(parseInt(gameId)), 100);
-      }
     }
   };
 
-  const resetGame = async () => {
-    if (gameId) {
-      try {
-        // Delete current game and create new one
-        await fetch(`/api/games?id=${gameId}`, { method: "DELETE" });
-        createNewGame();
-      } catch (err) {
-        console.error("Error resetting game:", err);
-        setError("Failed to reset game");
-      }
-    }
+  const handleGameStatusChange = (status: GameStatus) => {
+    setGameStatusInfo(status);
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading game...</div>
-      </div>
-    );
-  }
+  const resetGame = () => {
+    setGameState({
+      fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      currentTurn: "white",
+      gameStatus: "active",
+      moveHistory: [],
+      capturedPieces: { white: [], black: [] },
+    });
+    setGameStatusInfo({
+      isCheckmate: false,
+      isStalemate: false,
+      isDraw: false,
+      isInCheck: false,
+      turn: "white",
+    });
+  };
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-400 text-xl mb-4">{error}</div>
-          <Link
-            href="/"
-            className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
-          >
-            Back to Home
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const getGameStatusMessage = () => {
+    if (gameStatusInfo.isCheckmate) {
+      return `Checkmate! ${
+        gameStatusInfo.turn === "white" ? "Black" : "White"
+      } wins!`;
+    }
+    if (gameStatusInfo.isStalemate) {
+      return "Stalemate! Game is a draw.";
+    }
+    if (gameStatusInfo.isDraw) {
+      return "Draw! Game ended in a draw.";
+    }
+    if (gameStatusInfo.isInCheck) {
+      return `${
+        gameStatusInfo.turn === "white" ? "White" : "Black"
+      } is in check!`;
+    }
+    return `${gameStatusInfo.turn === "white" ? "White" : "Black"} to move`;
+  };
+
+  const getStatusColor = () => {
+    if (gameStatusInfo.isCheckmate) return "text-red-600";
+    if (gameStatusInfo.isStalemate || gameStatusInfo.isDraw)
+      return "text-yellow-600";
+    if (gameStatusInfo.isInCheck) return "text-orange-600";
+    return "text-gray-700";
+  };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="container mx-auto px-4 py-8">
-        {/* Simple Header with Turn Indicator */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <p className="text-xl font-medium text-gray-300">
-              {gameState.gameStatus === "active"
-                ? `${gameState.currentTurn}'s turn`
-                : gameState.gameStatus === "checkmate"
-                ? "🏆 Checkmate!"
-                : gameState.gameStatus === "stalemate"
-                ? "🤝 Stalemate - Draw"
-                : gameState.gameStatus === "draw"
-                ? "🤝 Draw"
-                : `Game ${gameState.gameStatus}`}
-            </p>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            ♛ Chess Game ♛
+          </h1>
+          <p className="text-gray-600">
+            {gameId ? `Game ID: ${gameId}` : "New Game"}
+          </p>
+        </div>
 
-          <div className="flex space-x-4">
-            <button
-              onClick={resetGame}
-              className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
-            >
-              New Game
-            </button>
-            <Link
-              href="/"
-              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
-            >
-              Home
-            </Link>
+        {/* Game Status */}
+        <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className={`text-xl font-semibold ${getStatusColor()}`}>
+                {getGameStatusMessage()}
+              </h2>
+              <p className="text-sm text-gray-600">
+                Move #{Math.ceil(gameState.moveHistory.length / 2) + 1}
+              </p>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={resetGame}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
+              >
+                🔄 Reset Game
+              </button>
+              <Link
+                href="/"
+                className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
+              >
+                🏠 Home
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* Chess Board - Centered */}
-        <div className="flex justify-center">
-          <ChessBoard
-            gameId={gameId ? parseInt(gameId) : undefined}
-            fen={gameState.fen}
-            onMove={handleMove}
-            disabled={gameState.gameStatus !== "active"}
-          />
+        {/* Game Board and Info */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Chess Board */}
+          <div className="lg:col-span-3">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <ChessBoard
+                gameId={gameId ? parseInt(gameId) : undefined}
+                fen={gameState.fen}
+                onMove={handleMove}
+                onGameStatusChange={handleGameStatusChange}
+              />
+            </div>
+          </div>
+
+          {/* Game Info Panel */}
+          <div className="lg:col-span-1 space-y-4">
+            {/* Turn Indicator */}
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                Current Turn
+              </h3>
+              <div className="flex items-center space-x-2">
+                <div
+                  className={`w-4 h-4 rounded-full ${
+                    gameStatusInfo.turn === "white"
+                      ? "bg-gray-200 border-2 border-gray-400"
+                      : "bg-gray-800"
+                  }`}
+                ></div>
+                <span className="capitalize font-medium">
+                  {gameStatusInfo.turn}
+                </span>
+              </div>
+            </div>
+
+            {/* Move History */}
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                Move History
+              </h3>
+              <div className="max-h-40 overflow-y-auto">
+                {gameState.moveHistory.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No moves yet</p>
+                ) : (
+                  <div className="space-y-1">
+                    {gameState.moveHistory.map((move, index) => (
+                      <div key={index} className="text-sm">
+                        <span className="text-gray-600">
+                          {Math.ceil((index + 1) / 2)}.
+                        </span>
+                        {index % 2 === 0 && (
+                          <span className="ml-1 font-mono">{move}</span>
+                        )}
+                        {index % 2 === 1 && (
+                          <span className="ml-4 font-mono">{move}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Game Info */}
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                Game Info
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Status:</span>
+                  <span className={`font-medium ${getStatusColor()}`}>
+                    {gameStatusInfo.isCheckmate
+                      ? "Checkmate"
+                      : gameStatusInfo.isStalemate
+                      ? "Stalemate"
+                      : gameStatusInfo.isDraw
+                      ? "Draw"
+                      : gameStatusInfo.isInCheck
+                      ? "Check"
+                      : "Active"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Moves:</span>
+                  <span className="font-medium">
+                    {gameState.moveHistory.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -318,8 +236,8 @@ export default function Board() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-          <div className="text-white text-xl">Loading...</div>
+        <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center">
+          <div className="text-gray-700 text-xl">Loading game...</div>
         </div>
       }
     >

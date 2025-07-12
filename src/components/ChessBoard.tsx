@@ -19,6 +19,13 @@ interface ChessBoardProps {
     gameStatus?: string;
     move?: string;
   }) => void;
+  onGameStatusChange?: (status: {
+    isCheckmate: boolean;
+    isStalemate: boolean;
+    isDraw: boolean;
+    isInCheck: boolean;
+    turn: "white" | "black";
+  }) => void;
   disabled?: boolean;
   viewMode?: boolean;
 }
@@ -230,6 +237,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   gameId,
   fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   onMove,
+  onGameStatusChange,
   disabled = false,
   viewMode = false,
 }) => {
@@ -272,8 +280,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         : status.isStalemate || status.isDraw
         ? "draw"
         : null,
-      skipEndScreen: viewMode,
+      skipEndScreen: false,
     });
+
+    // Call the game status change callback
+    if (onGameStatusChange) {
+      onGameStatusChange(status);
+    }
 
     // Play game start sound for new games (starting position)
     if (
@@ -282,7 +295,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     ) {
       soundManager.play("game-start");
     }
-  }, [fen, viewMode]);
+  }, [fen, viewMode, onGameStatusChange]);
 
   // Play game end sounds for draws/stalemates
   useEffect(() => {
@@ -347,6 +360,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             });
             setLastMove({ from, to });
 
+            // Call the game status change callback
+            if (onGameStatusChange) {
+              onGameStatusChange(status);
+            }
+
             if (onMove) {
               onMove(result);
             }
@@ -401,6 +419,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             skipEndScreen: false,
           });
           setLastMove({ from, to });
+
+          // Call the game status change callback
+          if (onGameStatusChange) {
+            onGameStatusChange(status);
+          }
 
           if (onMove) {
             onMove({ success: true, fen: chessService.getFen() });

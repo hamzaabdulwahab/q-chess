@@ -3,16 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "setup-db": "node scripts/setup-db.js"
+    "dev": "bun --bun next dev --turbopack",
+    "build": "bun --bun next build",
+    "start": "bun --bun next start",
+    "lint": "bun --bun next lint",
+    "install": "bun install",
+    "add": "bun add",
+    "remove": "bun remove"
   },
   "dependencies": {
     "chess.js": "^1.3.1",
     "dotenv": "^16.5.0",
-    "mysql2": "^3.14.1",
     "next": "15.3.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
