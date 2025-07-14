@@ -26,3 +26,30 @@ export interface MoveResult {
   fen?: string;
   error?: string;
 }
+
+export interface Game {
+  id: number;
+  status: string;
+  winner?: "white" | "black" | "draw";
+  created_at: string;
+  updated_at: string;
+  fen: string;
+  pgn: string;
+}
+
+export interface Move {
+  id: number;
+  game_id: number;
+  move_number: number;
+  player: "white" | "black";
+  san: string;
+  fen_before: string;
+  fen_after: string;
+  pgn: string;
+  created_at: string;
+}
+
+export interface GameWithMoves extends Game {
+  moves: Move[];
+  totalMoves: number;
+}
