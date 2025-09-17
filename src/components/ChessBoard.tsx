@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Image from "next/image";
 import { Home, Target, Eye } from "lucide-react";
 import { ChessClient } from "@/lib/chess-client";
 import { soundManager } from "@/lib/sound-manager";
@@ -80,18 +79,21 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
   return (
     <div className="flex items-center justify-center w-full h-full select-none pointer-events-none">
       {!imageError ? (
-        <Image
+        <img
           src={imagePath}
           alt={piece}
           width={97}
           height={97}
-          quality={100}
-          unoptimized
-          className="chess-piece-image"
+          className="chess-piece-image max-w-full max-h-full object-contain"
           data-color={piece[0] === "w" ? "white" : "black"}
           draggable={false}
-          onError={() => setImageError(true)}
-          priority
+          onError={() => {
+            console.log(`Failed to load piece image: ${imagePath}`);
+            setImageError(true);
+          }}
+          onLoad={() => {
+            console.log(`Successfully loaded piece image: ${imagePath}`);
+          }}
         />
       ) : (
         <div
