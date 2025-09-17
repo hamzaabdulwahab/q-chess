@@ -956,7 +956,7 @@ function BoardContent() {
         </div>
         {/* Right-side memes section removed */}
       </div>
-      <Ticker speed={600} />
+      <Ticker />
     </div>
   );
 }
