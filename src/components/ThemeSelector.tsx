@@ -14,7 +14,6 @@ export function ThemeSelector() {
   useEffect(() => {
     if (isOpen && buttonRef.current && dropdownRef.current) {
       const buttonRect = buttonRef.current.getBoundingClientRect();
-      const dropdownRect = dropdownRef.current.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
       const viewportWidth = window.innerWidth;
       
@@ -29,7 +28,7 @@ export function ThemeSelector() {
       if (left + 256 > viewportWidth - 16) left = viewportWidth - 256 - 16;
       
       // Calculate vertical position
-      let top = showAbove ? buttonRect.top - 8 : buttonRect.bottom + 8;
+      const top = showAbove ? buttonRect.top - 8 : buttonRect.bottom + 8;
       
       setDropdownPosition({
         top,
