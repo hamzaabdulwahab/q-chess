@@ -10,12 +10,16 @@ type TickerProps = {
 
 export function Ticker({
   src = "/ticker.txt",
-  speed = 50,
-  gap = 20,
+  speed = 30, // pixels per second (default slower visual pace)
+  gap = 32,
 }: TickerProps) {
   const [lines, setLines] = useState<string[]>([]);
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const [durationSec, setDurationSec] = useState<number | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const offsetRef = useRef<number>(0); // current translated px
+  const contentWidthRef = useRef<number>(0); // full width of duplicated content
+  const lastTsRef = useRef<number | null>(null);
+  // debug overlay removed
 
   useEffect(() => {
     let active = true;
@@ -66,66 +70,68 @@ export function Ticker({
     };
   }, [src]);
 
-  // Duplicate items to create a seamless loop
-  const items = useMemo(
-    () => (lines.length ? [...lines, ...lines] : []),
-    [lines]
-  );
+  // Duplicate items to create a seamless loop (two sets)
+  const items = useMemo(() => (lines.length ? [...lines, ...lines] : []), [lines]);
 
-  // Compute animation duration from content width and speed (px/sec)
+  // JS-driven marquee animation (requestAnimationFrame)
   useEffect(() => {
     const el = trackRef.current;
-    if (!el) return;
-    const calc = () => {
-      const width = el.scrollWidth;
-      const distance = width * 0.5; // we translate -50%
-      const sec = speed > 0 ? distance / speed : 40;
-      // Minimal clamp so very high speeds are reflected
-      const finalDuration = Math.max(0.5, sec);
-      console.log(`📊 Ticker calc: width=${width}px, distance=${distance}px, speed=${speed}px/s, duration=${finalDuration}s`);
-      setDurationSec(finalDuration);
-    };
-    // Delay to ensure layout is ready
-    const t = setTimeout(calc, 0);
-    const RO: typeof ResizeObserver | undefined =
-      typeof ResizeObserver !== "undefined" ? ResizeObserver : undefined;
-    const ro = RO ? new RO(() => calc()) : undefined;
-    if (ro) ro.observe(el);
-    window.addEventListener("resize", calc);
-    return () => {
-      clearTimeout(t);
-      if (ro) ro.disconnect();
-      window.removeEventListener("resize", calc);
-    };
-  }, [items, speed, gap]);
+    if (!el || items.length === 0) return;
 
-  // Inline CSS variables to control speed/gap
-  const style = useMemo(
-    () => {
-      const finalStyle = {
-        // speed is pixels per second; animation duration depends on track width via CSS
-        ["--ticker-gap"]: `${gap}px`,
-        ["--ticker-duration"]: durationSec ? `${durationSec}s` : undefined,
-        // Inline overrides to guarantee the class animation properties are updated
-        animationDuration: durationSec ? `${durationSec}s` : undefined,
-        animationPlayState: "running",
-      } as React.CSSProperties;
-      
-      console.log(`🎬 Ticker style applied:`, finalStyle);
-      return finalStyle;
-    },
-    [gap, durationSec]
-  );
+    // Measure width of first half (original set) for looping distance
+    // We rely on duplicated array: length/2 original, next half duplicate.
+    const originalCount = lines.length;
+    const childNodes = Array.from(el.children) as HTMLElement[];
+    let firstSetWidth = 0;
+    for (let i = 0; i < originalCount && i < childNodes.length; i++) {
+      firstSetWidth += childNodes[i].offsetWidth + (i < originalCount - 1 ? gap : 0);
+    }
+    contentWidthRef.current = firstSetWidth;
+    offsetRef.current = 0; // reset
+    lastTsRef.current = null;
+  // (debug overlay removed)
+
+    const step = (ts: number) => {
+      if (lastTsRef.current == null) {
+        lastTsRef.current = ts;
+      }
+      const dt = (ts - lastTsRef.current) / 1000; // seconds
+      lastTsRef.current = ts;
+      // Advance by speed * dt
+      offsetRef.current += speed * dt;
+      const loopWidth = contentWidthRef.current;
+      if (loopWidth > 0) {
+        // Wrap around when surpassing loopWidth
+        if (offsetRef.current >= loopWidth) {
+          offsetRef.current = offsetRef.current % loopWidth;
+        }
+        // Apply transform: move left by offset
+        el.style.transform = `translate3d(${-offsetRef.current}px,0,0)`;
+      }
+      frameRef.current = requestAnimationFrame(step);
+    };
+    frameRef.current = requestAnimationFrame(step);
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    };
+  }, [items, lines.length, speed, gap]);
+  // Inline style for gap only now (transform handled by JS)
+  const style = useMemo(() => ({
+    ["--ticker-gap"]: `${gap}px`,
+    display: 'flex',
+    gap: `${gap}px`,
+    alignItems: 'center',
+    whiteSpace: 'nowrap',
+    willChange: 'transform'
+  }) as React.CSSProperties, [gap]);
 
   return (
     <div className="ticker-root" aria-label="Live ticker" role="region">
       <div className="ticker-viewport">
-        <div className="ticker-track" ref={trackRef} style={style}>
+        <div ref={trackRef} className="ticker-track js-marquee" style={style}>
           {items.map((t, i) => {
             const isWelcome = lines.length > 0 && i % lines.length === 0;
-            const cls = isWelcome
-              ? "ticker-item ticker-item--welcome"
-              : "ticker-item";
+            const cls = isWelcome ? "ticker-item ticker-item--welcome" : "ticker-item";
             return (
               <div key={`${i}-${t}`} className={cls}>
                 {t}
@@ -133,6 +139,7 @@ export function Ticker({
             );
           })}
         </div>
+        {/* debug overlay removed */}
       </div>
     </div>
   );

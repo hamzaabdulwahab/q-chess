@@ -733,8 +733,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           setPossibleMoves(chessService.getPossibleMoves(square));
         } else {
           // Deselect if clicking on opponent's piece or empty square
-          // Play illegal move sound if trying to move to an invalid square
-          if (selectedSquare) {
+          // Only play illegal move sound if trying to move to an invalid destination square
+          // (not just for clicking opponent pieces or empty squares when selecting)
+          if (selectedSquare && !possibleMoves.includes(square)) {
             soundManager.play("illegal-move");
           }
           setSelectedSquare(null);
@@ -745,8 +746,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         setSelectedSquare(square);
         setPossibleMoves(chessService.getPossibleMoves(square));
       } else if (piece && piece[0] !== gameState.turn.charAt(0)) {
-        // Trying to select opponent's piece - play illegal move sound
-        soundManager.play("illegal-move");
+        // Trying to select opponent's piece - only play illegal sound if it's their turn
+        // (Don't play sound for just clicking on opponent pieces when it's not their turn)
+        // This is actually normal behavior, so no sound needed
       }
     },
     [
