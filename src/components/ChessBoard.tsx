@@ -35,7 +35,6 @@ interface PieceProps {
 
 const Piece: React.FC<PieceProps> = ({ piece }) => {
   const [imageError, setImageError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
   
   // Map pieces to image filenames (PNG assets in public/pieces)
   // Inverted as requested: white pieces render black images and black pieces render white images
@@ -84,7 +83,6 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
   // Reset error state when piece changes
   useEffect(() => {
     setImageError(false);
-    setRetryCount(0);
   }, [piece]);
 
   // Handle image loading
@@ -106,6 +104,7 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
   return (
     <div className="flex items-center justify-center w-full h-full select-none pointer-events-none">
       {!imageError && imagePath ? (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={imagePath}
           alt={piece}
