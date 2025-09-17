@@ -14,7 +14,6 @@ export function Ticker({
   gap = 20,
 }: TickerProps) {
   const [lines, setLines] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [durationSec, setDurationSec] = useState<number | null>(null);
 
@@ -22,18 +21,44 @@ export function Ticker({
     let active = true;
     (async () => {
       try {
-        const res = await fetch(src, { cache: "no-store" });
+        const res = await fetch(src, { 
+          cache: "no-store",
+          headers: {
+            'Cache-Control': 'no-cache',
+          }
+        });
         if (!res.ok) throw new Error(`Failed to load ticker: ${res.status}`);
         const text = await res.text();
         const items = text
           .split(/\r?\n/)
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
-        if (active)
-          setLines(items.length ? items : ["Add items in public/ticker.txt"]);
+        if (active) {
+          // If no items loaded, use fallback content
+          if (items.length === 0) {
+            setLines([
+              "Welcome to Q-Chess — enjoy your game!",
+              "Tip: Knights jump in L-shapes; don't forget forks.",
+              "Always control the center squares (d4, d5, e4, e5).",
+              "Develop your knights and bishops before moving your queen.",
+              "Castle early to protect your king."
+            ]);
+          } else {
+            setLines(items);
+          }
+        }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to load ticker";
-        if (active) setError(msg);
+        console.error("Ticker load error:", e);
+        // Use fallback content instead of showing error
+        if (active) {
+          setLines([
+            "Welcome to Q-Chess — enjoy your game!",
+            "Tip: Knights jump in L-shapes; don't forget forks.",
+            "Always control the center squares (d4, d5, e4, e5).",
+            "Develop your knights and bishops before moving your queen.",
+            "Castle early to protect your king."
+          ]);
+        }
       }
     })();
     return () => {
@@ -90,21 +115,17 @@ export function Ticker({
     <div className="ticker-root" aria-label="Live ticker" role="region">
       <div className="ticker-viewport">
         <div className="ticker-track" ref={trackRef} style={style}>
-          {error ? (
-            <div className="ticker-item text-red-400">{error}</div>
-          ) : (
-            items.map((t, i) => {
-              const isWelcome = lines.length > 0 && i % lines.length === 0;
-              const cls = isWelcome
-                ? "ticker-item ticker-item--welcome"
-                : "ticker-item";
-              return (
-                <div key={`${i}-${t}`} className={cls}>
-                  {t}
-                </div>
-              );
-            })
-          )}
+          {items.map((t, i) => {
+            const isWelcome = lines.length > 0 && i % lines.length === 0;
+            const cls = isWelcome
+              ? "ticker-item ticker-item--welcome"
+              : "ticker-item";
+            return (
+              <div key={`${i}-${t}`} className={cls}>
+                {t}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

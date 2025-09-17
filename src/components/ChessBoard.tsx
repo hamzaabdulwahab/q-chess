@@ -35,6 +35,8 @@ interface PieceProps {
 }
 
 const Piece: React.FC<PieceProps> = ({ piece }) => {
+  const [imageError, setImageError] = useState(false);
+  
   // Map pieces to image filenames (PNG assets in public/pieces)
   // Inverted as requested: white pieces render black images and black pieces render white images
   const pieceImages: { [key: string]: string } = {
@@ -51,6 +53,7 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
     bN: "white-knight.png",
     bP: "white-pawn.png",
   };
+  
   const pieceSymbols: { [key: string]: string } = {
     wK: "♔",
     wQ: "♕",
@@ -69,31 +72,34 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
   const imagePath = `/pieces/${pieceImages[piece]}`;
   const color = piece[0] === "w" ? "text-white" : "text-gray-300";
 
+  // Reset error state when piece changes
+  useEffect(() => {
+    setImageError(false);
+  }, [piece]);
+
   return (
     <div className="flex items-center justify-center w-full h-full select-none pointer-events-none">
-      <Image
-        src={imagePath}
-        alt={piece}
-        width={97}
-        height={97}
-        quality={100}
-        unoptimized
-        className="chess-piece-image"
-        data-color={piece[0] === "w" ? "white" : "black"}
-        draggable={false}
-        onError={(e) => {
-          const target = e.target as HTMLImageElement;
-          target.style.display = "none";
-          const fallback = target.nextSibling as HTMLElement;
-          if (fallback) fallback.style.display = "block";
-        }}
-      />
-      <div
-        className={`chess-piece-fallback font-bold ${color} hidden`}
-        style={{ display: "none" }}
-      >
-        {pieceSymbols[piece] || ""}
-      </div>
+      {!imageError ? (
+        <Image
+          src={imagePath}
+          alt={piece}
+          width={97}
+          height={97}
+          quality={100}
+          unoptimized
+          className="chess-piece-image"
+          data-color={piece[0] === "w" ? "white" : "black"}
+          draggable={false}
+          onError={() => setImageError(true)}
+          priority
+        />
+      ) : (
+        <div
+          className={`chess-piece-fallback font-bold text-4xl ${color}`}
+        >
+          {pieceSymbols[piece] || ""}
+        </div>
+      )}
     </div>
   );
 };
