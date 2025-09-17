@@ -46,3 +46,31 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ url: publicUrl });
 }
+
+export async function DELETE() {
+  const supabase = getSupabaseServer();
+  const { data: userRes, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !userRes.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const uid = userRes.user.id;
+
+  // Try to remove any existing avatar files for this user (best effort)
+  // We don't know the extension, so list the folder and remove its contents.
+  const { data: list, error: listErr } = await supabase.storage
+    .from("avatars")
+    .list(uid + "/");
+  if (!listErr && list && list.length) {
+    const paths = list.map((f) => `${uid}/${f.name}`);
+    await supabase.storage.from("avatars").remove(paths);
+  }
+
+  // Clear avatar_url in profiles
+  const { error: pErr } = await supabase
+    .from("profiles")
+    .update({ avatar_url: null })
+    .eq("id", uid);
+  if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
+
+  return NextResponse.json({ ok: true });
+}

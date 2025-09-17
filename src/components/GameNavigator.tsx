@@ -4,7 +4,9 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NewGameModal, type NewGameChoice } from "./NewGameModal";
-import { InviteDialog } from "./InviteDialog";
+// Invite-related modals are not used here anymore
+import { SoundControl } from "@/components/SoundControl";
+import { ThemeSelector } from "@/components/ThemeSelector";
 
 type Props = {
   onNewGame: (choice: NewGameChoice) => void;
@@ -14,7 +16,6 @@ export function GameNavigator({ onNewGame }: Props) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [newGameOpen, setNewGameOpen] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
 
   // Close on outside click or Escape
   useEffect(() => {
@@ -41,7 +42,7 @@ export function GameNavigator({ onNewGame }: Props) {
     if ((window as unknown as Record<string, unknown>).__PROFILE_DIRTY__) {
       e.preventDefault();
       window.dispatchEvent(
-        new CustomEvent("profile-guard", { detail: { href } })
+        new CustomEvent("profile-guard", { detail: { href } }),
       );
     }
   };
@@ -94,6 +95,7 @@ export function GameNavigator({ onNewGame }: Props) {
             >
               New Game
             </button>
+            {/* Invites entry moved into New Game modal */}
             <Link
               href="/"
               onClick={(e) => guardedNav(e, "/")}
@@ -101,6 +103,29 @@ export function GameNavigator({ onNewGame }: Props) {
             >
               Home
             </Link>
+            <Link
+              href="/archive"
+              onClick={(e) => guardedNav(e, "/archive")}
+              className="block w-full text-center bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
+              title="Game Archive"
+            >
+              Archive
+            </Link>
+
+            {/* Memes and YouTube toggles removed by request */}
+
+            {/* Theme selector */}
+            <div className="block w-full pt-2 border-t border-gray-800">
+              <ThemeSelector />
+            </div>
+
+            {/* Sound toggle inline */}
+            <div className="block w-full pt-2 border-t border-gray-800">
+              <SoundControl
+                variant="compact"
+                className="w-full justify-center"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -121,14 +146,11 @@ export function GameNavigator({ onNewGame }: Props) {
         onChoose={(choice) => {
           setNewGameOpen(false);
           if (!choice) return;
-          if (choice === "invite") {
-            setInviteOpen(true);
-            return;
-          }
           onNewGame(choice);
         }}
       />
-      <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
+
+      {/* Invite modals removed; bell dropdown handles invites */}
     </>
   );
 }

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Home, Target, Eye } from "lucide-react";
 import { ChessClient } from "@/lib/chess-client";
 import { soundManager } from "@/lib/sound-manager";
+import { useChessTheme } from "@/lib/theme-context";
 
 // Helper functions
 const coordsToSquare = (file: number, rank: number): string => {
@@ -25,8 +26,7 @@ interface ChessBoardProps {
   }) => void;
   disabled?: boolean;
   viewMode?: boolean;
-  orientation?: "white" | "black"; // which side is at the bottom visually
-  // Optional: current turn purely for UI cues (e.g., nudge). Does not rotate the board.
+  orientation?: "white" | "black";
   turn?: "white" | "black";
 }
 
@@ -51,8 +51,6 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
     bN: "white-knight.png",
     bP: "white-pawn.png",
   };
-
-  // Fallback Unicode symbols if images aren't available
   const pieceSymbols: { [key: string]: string } = {
     wK: "♔",
     wQ: "♕",
@@ -84,7 +82,6 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
         data-color={piece[0] === "w" ? "white" : "black"}
         draggable={false}
         onError={(e) => {
-          // Fallback to Unicode symbols if image fails to load
           const target = e.target as HTMLImageElement;
           target.style.display = "none";
           const fallback = target.nextSibling as HTMLElement;
@@ -108,10 +105,8 @@ interface SquareProps {
   isLight: boolean;
   isSelected: boolean;
   isHighlighted: boolean;
-  isPossibleMove: boolean;
   isLastMove: boolean;
   isCheck: boolean;
-  moveType?: "normal" | "capture" | "castle" | "enpassant" | "promotion";
   onClick: () => void;
   fileLabel?: string | null;
   rankLabel?: string | null;
@@ -122,86 +117,89 @@ const Square: React.FC<SquareProps> = ({
   isLight,
   isSelected,
   isHighlighted,
-  isPossibleMove,
   isLastMove,
   isCheck,
-  moveType = "normal",
   onClick,
   fileLabel,
   rankLabel,
 }) => {
+  const [hovered, setHovered] = useState(false);
+  const { currentTheme } = useChessTheme();
+
+  // Use theme colors instead of hardcoded ones
+  const baseColor = isLight ? currentTheme.lightSquare : currentTheme.darkSquare;
+  const hoverColor = isLight ? currentTheme.lightHover : currentTheme.darkHover;
+  const coordColor = isLight ? currentTheme.lightCoord : currentTheme.darkCoord;
+
   const squareClasses = [
-    "chess-square-large flex items-center justify-center relative cursor-pointer transition-colors duration-150",
-    isLight ? "bg-gray-800 hover:bg-gray-700" : "bg-gray-950 hover:bg-gray-900",
-    isSelected ? "ring-4 ring-violet-500 ring-inset" : "",
-    isHighlighted ? "bg-violet-900/40" : "",
-    isLastMove ? "bg-violet-800/30" : "",
-    isCheck ? "bg-red-500/30" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    "chess-square-large flex items-center justify-center relative cursor-pointer transition-colors duration-100",
+  ].join(" ");
 
-  const getMoveIndicator = () => {
-    if (!isPossibleMove) return null;
-
-    switch (moveType) {
-      case "capture":
-        return (
-          <div className="w-full h-full border-4 border-red-500 rounded-full opacity-70 relative">
-            <div className="absolute inset-2 border-2 border-red-400 rounded-full"></div>
-          </div>
-        );
-      case "castle":
-        return (
-          <div className="w-6 h-6 bg-violet-600 rounded-full opacity-80 border-2 border-violet-400 flex items-center justify-center">
-            <div className="text-white font-bold text-xs">♔</div>
-          </div>
-        );
-      case "enpassant":
-        return (
-          <div className="w-6 h-6 bg-fuchsia-700 rounded-full opacity-80 border-2 border-fuchsia-500 flex items-center justify-center">
-            <div className="text-white font-bold text-xs">EP</div>
-          </div>
-        );
-      case "promotion":
-        return (
-          <div className="w-6 h-6 bg-yellow-600 rounded-lg opacity-80 border-2 border-yellow-400 flex items-center justify-center">
-            <div className="text-white font-bold text-xs">♕</div>
-          </div>
-        );
-      default:
-        return (
-          <div className="w-6 h-6 bg-violet-500 rounded-full opacity-75 shadow-md"></div>
-        );
-    }
-  };
+  const overlayNodes: React.ReactNode[] = [];
+  if (isLastMove) {
+    overlayNodes.push(
+      <div
+        key="last"
+        className="absolute inset-0 pointer-events-none"
+        style={{ backgroundColor: currentTheme.lastMoveHighlight }}
+      />,
+    );
+  }
+  if (isHighlighted) {
+    overlayNodes.push(
+      <div
+        key="hl"
+        className="absolute inset-0 pointer-events-none"
+        style={{ backgroundColor: currentTheme.moveHighlight }}
+      />,
+    );
+  }
+  if (isCheck) {
+    overlayNodes.push(
+      <div
+        key="check"
+        className="absolute inset-0 pointer-events-none bg-red-600/35"
+      />,
+    );
+  }
+  if (isSelected) {
+    overlayNodes.push(
+      <div
+        key="sel"
+        className="absolute inset-0 pointer-events-none border-4 border-white/85"
+        style={{
+          boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.4)",
+        }}
+      />,
+    );
+  }
 
   return (
-    <div className={squareClasses} onClick={onClick}>
-      <div className="square-content w-full h-full flex items-center justify-center">
+    <div
+      className={squareClasses}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ backgroundColor: hovered ? hoverColor : baseColor }}
+    >
+      {overlayNodes}
+      <div className="square-content w-full h-full flex items-center justify-center relative z-10">
         {piece && <Piece piece={piece} />}
       </div>
-      {isPossibleMove && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          {getMoveIndicator()}
-        </div>
-      )}
       {(fileLabel || rankLabel) && (
         <>
           {fileLabel && (
             <div
-              className={`coord absolute bottom-1 left-1 text-sm font-bold ${
-                isLight ? "text-gray-800" : "text-white"
-              }`}
+              className="coord absolute bottom-1 left-1 text-sm font-bold z-20"
+              style={{ color: coordColor }}
             >
               {fileLabel}
             </div>
           )}
           {rankLabel && (
             <div
-              className={`coord absolute top-1 left-1 text-sm font-bold ${
-                isLight ? "text-gray-800" : "text-white"
-              }`}
+              className="coord absolute top-1 left-1 text-sm font-bold z-20"
+              style={{ color: coordColor }}
             >
               {rankLabel}
             </div>
@@ -211,6 +209,8 @@ const Square: React.FC<SquareProps> = ({
     </div>
   );
 };
+
+// (Duplicate Square implementation removed above)
 
 interface PromotionModalProps {
   show: boolean;
@@ -276,7 +276,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   orientation = "white",
 }) => {
   const [chessService, setChessService] = useState<ChessClient>(
-    new ChessClient(fen)
+    new ChessClient(fen),
   );
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
@@ -294,7 +294,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   } | null>(null);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(
-    null
+    null,
   );
   // Nudge removed in favor of true rotation
 
@@ -313,8 +313,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           ? "black"
           : "white"
         : status.isStalemate || status.isDraw
-        ? "draw"
-        : null,
+          ? "draw"
+          : null,
       skipEndScreen: viewMode,
     });
     // Play game start sound for new games (starting position)
@@ -346,6 +346,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           }
 
           const prevFen = chessService.getFen();
+          const prevPly = chessService.getHistory().length; // half-moves so far
+          const expectedPly = prevPly + 1;
+          const clientMoveId = `${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 10)}`;
           const moveDetails = chessService.getMoveDetails(from, to, promotion);
           const local = chessService.makeMove(from, to, promotion);
           if (!local.success) {
@@ -358,7 +363,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             isCapture: Boolean(local.capturedPiece),
             isCastle: Boolean(
               moveDetails?.flags.includes("k") ||
-                moveDetails?.flags.includes("q")
+                moveDetails?.flags.includes("q"),
             ),
             isPromotion: Boolean(promotion || moveDetails?.flags.includes("p")),
             isCheck: status.isInCheck && !status.isCheckmate,
@@ -378,14 +383,24 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 ? "black"
                 : "white"
               : status.isStalemate || status.isDraw
-              ? "draw"
-              : null,
+                ? "draw"
+                : null,
             skipEndScreen: false,
           });
           setLastMove({ from, to });
+          // Provide gameStatus in optimistic callback so parent can freeze clocks instantly
+          const gameStatus: "active" | "checkmate" | "stalemate" | "draw" =
+            status.isCheckmate
+              ? "checkmate"
+              : status.isStalemate
+                ? "stalemate"
+                : status.isDraw
+                  ? "draw"
+                  : "active";
           onMove?.({
             success: true,
             fen: chessService.getFen(),
+            gameStatus,
             from,
             to,
             promotion,
@@ -397,10 +412,19 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               const response = await fetch(`/api/games/${gameId}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ from, to, promotion }),
+                body: JSON.stringify({
+                  from,
+                  to,
+                  promotion,
+                  // idempotency and conflict detection
+                  clientMoveId,
+                  expectedPly,
+                  prevFen,
+                  san: local.san,
+                }),
               });
-              const result = await response.json();
-              if (response.ok && result.success) {
+              const result = await response.json().catch(() => null);
+              if (response.ok && result && result.success) {
                 const newChessService = new ChessClient(result.fen);
                 setChessService(newChessService);
                 const s = newChessService.getGameStatus();
@@ -412,8 +436,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   winner: result.winner,
                   skipEndScreen: false,
                 });
-              } else {
-                // Revert on server rejection
+              } else if (response.ok && result && result.success === false) {
+                // Server asserts move is illegal -> revert
                 soundManager.play("illegal-move");
                 const revert = new ChessClient(prevFen);
                 setChessService(revert);
@@ -428,13 +452,86 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                       ? "black"
                       : "white"
                     : s.isStalemate || s.isDraw
-                    ? "draw"
-                    : null,
+                      ? "draw"
+                      : null,
                   skipEndScreen: false,
                 });
+              } else {
+                // Non-OK response (401/409/500 etc.) -> keep optimistic state and queue for retry
+                try {
+                  if (gameId) {
+                    const key = `queuedMoves:${gameId}`;
+                    const raw = localStorage.getItem(key);
+                    const queue: Array<{
+                      from: string;
+                      to: string;
+                      promotion: string | null;
+                      ts: number;
+                      clientMoveId: string;
+                      expectedPly: number;
+                      prevFen: string;
+                      san?: string;
+                    }> = raw ? JSON.parse(raw) : [];
+                    queue.push({
+                      from,
+                      to,
+                      promotion: promotion ?? null,
+                      ts: Date.now(),
+                      clientMoveId,
+                      expectedPly,
+                      prevFen,
+                      san: local.san,
+                    });
+                    localStorage.setItem(key, JSON.stringify(queue));
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("chess-queue-updated", {
+                          detail: { gameId, length: queue.length },
+                        }),
+                      );
+                    } catch {}
+                  }
+                } catch {}
               }
             } catch {
-              // Network error -> keep optimistic state; will resync on next load
+              // Network error -> keep optimistic state and queue move for later sync
+              try {
+                if (gameId) {
+                  const key = `queuedMoves:${gameId}`;
+                  const raw = localStorage.getItem(key);
+                  const queue: Array<{
+                    from: string;
+                    to: string;
+                    promotion: string | null;
+                    ts: number;
+                    clientMoveId: string;
+                    expectedPly: number;
+                    prevFen: string;
+                    san?: string;
+                  }> = raw ? JSON.parse(raw) : [];
+                  queue.push({
+                    from,
+                    to,
+                    promotion: promotion ?? null,
+                    ts: Date.now(),
+                    clientMoveId,
+                    expectedPly,
+                    prevFen,
+                    san: local.san,
+                  });
+                  localStorage.setItem(key, JSON.stringify(queue));
+                  // Notify listeners (Board page) that queue length changed
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("chess-queue-updated", {
+                        detail: { gameId, length: queue.length },
+                      }),
+                    );
+                  } catch {}
+                }
+              } catch {
+                // ignore storage issues
+              }
             }
           })();
 
@@ -455,17 +552,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             status.isCheckmate
               ? "checkmate"
               : status.isStalemate
-              ? "stalemate"
-              : status.isDraw
-              ? "draw"
-              : "active";
+                ? "stalemate"
+                : status.isDraw
+                  ? "draw"
+                  : "active";
 
           // Determine move characteristics for sound
           const moveData = {
             isCapture: Boolean(result.capturedPiece),
             isCastle: Boolean(
               moveDetails?.flags.includes("k") ||
-                moveDetails?.flags.includes("q")
+                moveDetails?.flags.includes("q"),
             ),
             isPromotion: Boolean(promotion || moveDetails?.flags.includes("p")),
             isCheck: status.isInCheck && !status.isCheckmate,
@@ -486,11 +583,41 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 ? "black" // If white is in checkmate, black wins
                 : "white" // If black is in checkmate, white wins
               : status.isStalemate || status.isDraw
-              ? "draw"
-              : null,
+                ? "draw"
+                : null,
             skipEndScreen: false,
           });
           setLastMove({ from, to });
+
+          // Queue this move for later server sync when a gameId becomes available
+          try {
+            const key = "queuedMoves:offline";
+            const raw = localStorage.getItem(key);
+            const queue: Array<{
+              from: string;
+              to: string;
+              promotion: string | null;
+              ts: number;
+              san?: string;
+            }> = raw ? JSON.parse(raw) : [];
+            queue.push({
+              from,
+              to,
+              promotion: promotion ?? null,
+              ts: Date.now(),
+              san: result.san,
+            });
+            localStorage.setItem(key, JSON.stringify(queue));
+            try {
+              window.dispatchEvent(
+                new CustomEvent("chess-queue-updated", {
+                  detail: { gameId: "offline", length: queue.length },
+                }),
+              );
+            } catch {}
+          } catch {
+            // ignore storage issues
+          }
 
           if (onMove) {
             onMove({
@@ -509,7 +636,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         return result;
       }
     },
-    [gameId, chessService, onMove]
+    [gameId, chessService, onMove],
   );
 
   const isPromotionMove = useCallback(
@@ -522,7 +649,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
       return (isWhitePawn && toRank === 8) || (!isWhitePawn && toRank === 1);
     },
-    [chessService]
+    [chessService],
   );
 
   const handlePromotionSelect = async (piece: string) => {
@@ -589,12 +716,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       disabled,
       makeMove,
       isPromotionMove,
-    ]
+    ],
   );
 
   const renderBoard = () => {
     const squares = [];
-    const detailedMoves = chessService.getAllMovesDetailed();
+    // Detailed moves no longer needed for visual indicators
     // Keep iteration order constant (white-at-bottom); visual flip handled by wrapper
     const isBlackView = orientation === "black";
     const rankRange = [...Array(8).keys()].reverse();
@@ -607,7 +734,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const piece = chessService.getPiece(square);
         const isLight = (rank + file) % 2 === 0;
         const isSelected = selectedSquare === square;
-        const isPossibleMove = possibleMoves.includes(square);
+        // No visual indication of possible moves
         const isLastMove =
           lastMove && (lastMove.from === square || lastMove.to === square);
         const isCheck =
@@ -627,34 +754,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           ? String(isBlackView ? 8 - rank : rank + 1)
           : null;
 
-        // Determine move type for visual indicator
-        let moveType:
-          | "normal"
-          | "capture"
-          | "castle"
-          | "enpassant"
-          | "promotion" = "normal";
-        if (isPossibleMove && selectedSquare) {
-          const moveDetail = detailedMoves.find(
-            (m) => m.from === selectedSquare && m.to === square
-          );
-          if (moveDetail) {
-            if (moveDetail.flags.includes("c")) {
-              moveType = "capture";
-            } else if (
-              moveDetail.flags.includes("k") ||
-              moveDetail.flags.includes("q")
-            ) {
-              moveType = "castle";
-            } else if (moveDetail.flags.includes("e")) {
-              moveType = "enpassant";
-            } else if (moveDetail.flags.includes("p")) {
-              moveType = "promotion";
-            }
-          } else if (piece) {
-            moveType = "capture";
-          }
-        }
+        // Move indicators removed: no need to compute moveType
 
         squares.push(
           <Square
@@ -665,14 +765,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             isLight={isLight}
             isSelected={isSelected}
             isHighlighted={false}
-            isPossibleMove={isPossibleMove}
             isLastMove={Boolean(isLastMove)}
             isCheck={Boolean(isCheck)}
-            moveType={moveType}
             onClick={() => handleSquareClick(square)}
             fileLabel={fileLabel}
             rankLabel={rankLabel}
-          />
+          />,
         );
       }
     }
@@ -783,9 +881,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 </div>
                 <div className="flex justify-center items-center gap-4 text-lg text-accent">
                   <div className="w-16 h-1 bg-gradient-to-r from-transparent via-violet-500 to-transparent"></div>
-                  <span className="font-semibold tracking-widest">
-                    FOR MY QUEEN
-                  </span>
+                  <span className="font-semibold tracking-widest">Q-CHESS</span>
                   <div className="w-16 h-1 bg-gradient-to-r from-transparent via-violet-500 to-transparent"></div>
                 </div>
                 <div className="mt-8 text-accent text-lg">

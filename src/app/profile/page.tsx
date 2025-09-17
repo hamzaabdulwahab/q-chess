@@ -24,12 +24,21 @@ export default function ProfilePage() {
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [saving, setSaving] = useState(false);
-  const [uploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Removed inline avatar upload overlay; avatar can be changed via global menu
   const [showGuard, setShowGuard] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const initialNameRef = useRef<string>("");
+  // Avatar dropdown menu & viewer
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const avatarWrapRef = useRef<HTMLDivElement | null>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showAvatarViewer, setShowAvatarViewer] = useState(false);
+  // Staged avatar changes (persist only on Save)
+  const [stagedAvatarFile, setStagedAvatarFile] = useState<File | null>(null);
+  const [stagedAvatarRemove, setStagedAvatarRemove] = useState(false);
+  const [stagedAvatarPreviewUrl, setStagedAvatarPreviewUrl] = useState<
+    string | null
+  >(null);
 
   const load = async () => {
     try {
@@ -55,6 +64,29 @@ export default function ProfilePage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Close avatar menu on outside click or Escape
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+    const onDown = (ev: MouseEvent | TouchEvent) => {
+      const el = avatarWrapRef.current;
+      if (!el) return;
+      const target = ev.target as Node | null;
+      if (target && el.contains(target)) return;
+      setAvatarMenuOpen(false);
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setAvatarMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown, { passive: true });
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [avatarMenuOpen]);
 
   const saveAll = async () => {
     setSaving(true);
@@ -87,13 +119,15 @@ export default function ProfilePage() {
           throw new Error(json2.error || "Failed to change password");
       }
 
-      // Upload avatar if chosen
-      if (selectedFile) {
-        if (selectedFile.size > 10 * 1024 * 1024) {
-          throw new Error("Image too large. Max 10MB allowed.");
-        }
+      // Persist staged avatar changes
+      if (stagedAvatarRemove) {
+        const resDel = await fetch("/api/profile/avatar", { method: "DELETE" });
+        const jsonDel = await resDel.json().catch(() => ({}));
+        if (!resDel.ok)
+          throw new Error(jsonDel.error || "Failed to remove avatar");
+      } else if (stagedAvatarFile) {
         const form = new FormData();
-        form.append("file", selectedFile);
+        form.append("file", stagedAvatarFile);
         const res3 = await fetch("/api/profile/avatar", {
           method: "POST",
           body: form,
@@ -103,7 +137,13 @@ export default function ProfilePage() {
       }
 
       await load();
-      setSelectedFile(null);
+      // Clear staged avatar state
+      setStagedAvatarFile(null);
+      setStagedAvatarRemove(false);
+      if (stagedAvatarPreviewUrl) {
+        URL.revokeObjectURL(stagedAvatarPreviewUrl);
+        setStagedAvatarPreviewUrl(null);
+      }
       setPw("");
       setPw2("");
       setShowGuard(false);
@@ -114,20 +154,23 @@ export default function ProfilePage() {
     }
   };
 
-  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Stage avatar change (do not persist until Save)
+  const onAvatarFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Enforce 10MB max on client
     if (file.size > 10 * 1024 * 1024) {
       setError("Image too large. Max 10MB allowed.");
-      e.currentTarget.value = ""; // reset so user can pick again
+      e.currentTarget.value = "";
       return;
     }
-    setError(null);
-    setSelectedFile(file);
+    if (stagedAvatarPreviewUrl) URL.revokeObjectURL(stagedAvatarPreviewUrl);
+    const url = URL.createObjectURL(file);
+    setStagedAvatarPreviewUrl(url);
+    setStagedAvatarFile(file);
+    setStagedAvatarRemove(false);
+    setAvatarMenuOpen(false);
+    e.currentTarget.value = "";
   };
-
-  const openPicker = () => fileInputRef.current?.click();
 
   const logout = async () => {
     const supabase = getSupabaseBrowser();
@@ -141,8 +184,9 @@ export default function ProfilePage() {
       nameInput.trim() !== initialNameRef.current ||
       pw.length > 0 ||
       pw2.length > 0 ||
-      selectedFile !== null,
-    [nameInput, pw, pw2, selectedFile]
+      stagedAvatarRemove ||
+      stagedAvatarFile !== null,
+    [nameInput, pw, pw2, stagedAvatarRemove, stagedAvatarFile]
   );
 
   useEffect(() => {
@@ -190,124 +234,196 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center px-4">
-      <div className="w-full max-w-lg bg-gray-800/60 backdrop-blur rounded-xl p-6 border border-gray-700">
-        <h1 className="text-2xl font-semibold mb-4">Your Profile</h1>
-        {loading ? (
-          <p>Loading…</p>
-        ) : error ? (
-          <p className="text-red-300">{error}</p>
-        ) : data ? (
-          <div className="space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="relative" style={{ width: 56, height: 56 }}>
-                <Avatar
-                  name={data.full_name || data.username || data.email}
-                  url={data.avatar_url}
-                  size={56}
-                />
-                <button
-                  type="button"
-                  onClick={openPicker}
-                  disabled={uploading}
-                  className="absolute -bottom-1 -right-1 w-7 h-7 grid place-items-center rounded-full bg-gray-800 border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-60"
-                  aria-label="Change profile picture"
-                  title="Change picture"
+    <div className="min-h-screen bg-gray-900 text-white px-4 py-10">
+      <div className="mx-auto w-full max-w-5xl grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main card */}
+        <div className="lg:col-span-2 bg-gray-800/60 backdrop-blur rounded-2xl p-8 border border-gray-700">
+          <h1 className="text-3xl font-semibold mb-6 tracking-tight text-white">
+            Your Profile
+          </h1>
+          {loading ? (
+            <p>Loading…</p>
+          ) : error ? (
+            <p className="text-red-300">{error}</p>
+          ) : data ? (
+            <div className="space-y-8">
+              {/* Header section with larger avatar and menu on click */}
+              <div className="flex items-center gap-6">
+                <div
+                  ref={avatarWrapRef}
+                  className="relative"
+                  style={{ width: 112, height: 112 }}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    className="w-3.5 h-3.5"
-                    aria-hidden
+                  <button
+                    type="button"
+                    onClick={() => setAvatarMenuOpen((v) => !v)}
+                    className="group block rounded-full outline-none focus:ring-2 focus:ring-accent"
+                    aria-haspopup="menu"
+                    aria-expanded={avatarMenuOpen}
+                    title="Profile picture menu"
+                    style={{ width: 112, height: 112 }}
                   >
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-8.086 8.086a2 2 0 01-.878.502l-3.09.883a.5.5 0 01-.62-.62l.883-3.09a2 2 0 01.502-.878l8.086-8.086z" />
-                    <path d="M12 5l3 3" />
-                  </svg>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={onFileSelected}
-                  className="hidden"
-                />
-              </div>
-              <div>
-                <div className="text-sm text-gray-400">Signed in as</div>
-                <div className="text-sm">{data.email || "-"}</div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <div className="text-sm text-gray-400">Username</div>
-                <div className="text-sm">
-                  {data.username ? `@${data.username}` : "-"}
+                    <Avatar
+                      name={data.full_name || data.username || data.email}
+                      url={
+                        stagedAvatarRemove
+                          ? null
+                          : stagedAvatarPreviewUrl || data.avatar_url
+                      }
+                      size={112}
+                    />
+                  </button>
+                  {/* Avatar dropdown */}
+                  <div
+                    className={`absolute z-10 mt-2 w-56 rounded-lg border border-gray-700 bg-gray-900/95 backdrop-blur-sm text-sm text-gray-200 shadow-xl transition-all duration-200 left-0 origin-top-left ${
+                      avatarMenuOpen
+                        ? "opacity-100 scale-100 translate-y-0"
+                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
+                    }`}
+                  >
+                    <div className="absolute -top-1.5 left-4 w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"></div>
+                    <button
+                      type="button"
+                      onClick={() => avatarFileInputRef.current?.click()}
+                      className="w-full text-left px-4 py-2.5 hover:bg-gray-800 hover:text-white transition-all duration-200"
+                    >
+                      Change Profile Picture
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStagedAvatarRemove(true);
+                        setStagedAvatarFile(null);
+                        if (stagedAvatarPreviewUrl) {
+                          URL.revokeObjectURL(stagedAvatarPreviewUrl);
+                          setStagedAvatarPreviewUrl(null);
+                        }
+                        setAvatarMenuOpen(false);
+                      }}
+                      disabled={
+                        stagedAvatarRemove ||
+                        (!stagedAvatarPreviewUrl && !data.avatar_url)
+                      }
+                      className="w-full text-left px-4 py-2.5 hover:bg-gray-800 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Remove Picture
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAvatarViewer(true)}
+                      disabled={
+                        stagedAvatarRemove ||
+                        !(stagedAvatarPreviewUrl || data.avatar_url)
+                      }
+                      className="w-full text-left px-4 py-2.5 hover:bg-gray-800 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      View Profile Picture
+                    </button>
+                  </div>
                 </div>
+                <div className="min-w-0">
+                  <div className="text-sm text-gray-400">Signed in as</div>
+                  <div className="text-lg font-medium truncate tracking-tight">
+                    {data.email || "-"}
+                  </div>
+                  <div className="mt-1 text-sm text-gray-400">Username</div>
+                  <div className="text-base tracking-tight">
+                    {data.username ? `@${data.username}` : "-"}
+                  </div>
+                </div>
+                {(stagedAvatarRemove || stagedAvatarPreviewUrl) && (
+                  <div className="text-xs text-gray-400 mt-2">
+                    Avatar change is staged. Click &quot;Save changes&quot; to
+                    apply.
+                  </div>
+                )}
               </div>
+
+              {/* Edit form */}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   saveAll();
                 }}
-                className="space-y-2"
+                className="grid grid-cols-1 md:grid-cols-2 gap-6"
               >
-                <label className="block text-sm text-gray-300">Full Name</label>
-                <input
-                  className="w-full rounded-lg bg-gray-900 border border-gray-700 px-3 py-2 outline-none focus:border-accent"
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  placeholder="Your full name"
-                />
-                <div className="space-y-2 pt-3">
-                  <div className="text-sm text-gray-300">Change Password</div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-gray-300 mb-1 font-medium tracking-normal">
+                    Full Name
+                  </label>
                   <input
-                    type="password"
-                    className="w-full rounded-lg bg-gray-900 border border-gray-700 px-3 py-2 outline-none focus:border-accent"
-                    placeholder="New password (8+ chars)"
-                    value={pw}
-                    onChange={(e) => setPw(e.target.value)}
-                  />
-                  <input
-                    type="password"
-                    className="w-full rounded-lg bg-gray-900 border border-gray-700 px-3 py-2 outline-none focus:border-accent"
-                    placeholder="Confirm new password"
-                    value={pw2}
-                    onChange={(e) => setPw2(e.target.value)}
+                    className="w-full rounded-xl bg-gray-900 border border-gray-700 px-3 py-3 outline-none focus:border-accent text-base leading-6"
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    placeholder="Your full name"
                   />
                 </div>
-
-                <button
-                  disabled={saving}
-                  className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white rounded-lg px-4 py-2 text-sm mt-4"
-                  type="submit"
-                >
-                  {saving ? "Saving…" : "Save"}
-                </button>
+                <div className="md:col-span-2">
+                  <div className="text-sm text-gray-300 mb-2 font-medium tracking-tight">
+                    Change Password
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input
+                      type="password"
+                      className="w-full rounded-xl bg-gray-900 border border-gray-700 px-3 py-3 outline-none focus:border-accent text-base leading-6"
+                      placeholder="New password (8+ chars)"
+                      value={pw}
+                      onChange={(e) => setPw(e.target.value)}
+                    />
+                    <input
+                      type="password"
+                      className="w-full rounded-xl bg-gray-900 border border-gray-700 px-3 py-3 outline-none focus:border-accent text-base leading-6"
+                      placeholder="Confirm new password"
+                      value={pw2}
+                      onChange={(e) => setPw2(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="md:col-span-2 flex gap-3">
+                  <button
+                    disabled={saving}
+                    className="btn-accent disabled:opacity-60 text-black rounded-xl px-6 py-3 text-base font-semibold"
+                    type="submit"
+                  >
+                    {saving ? "Saving…" : "Save changes"}
+                  </button>
+                  <button
+                    onClick={logout}
+                    className="bg-gray-800 hover:bg-gray-700 text-white rounded-xl px-6 py-3 text-base border border-gray-600 font-medium"
+                    type="button"
+                  >
+                    Log out
+                  </button>
+                </div>
               </form>
             </div>
-
-            <button
-              onClick={logout}
-              className="w-full mt-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-4 py-2 font-medium border border-gray-600"
-              type="button"
-            >
-              Log out
-            </button>
-          </div>
-        ) : null}
-
-        <div className="text-sm text-gray-300 mt-6 text-center">
-          <Link
-            href="/"
-            onClick={(e) => handleNav(e, "/")}
-            className="link-accent hover:underline"
-          >
-            Back to Home
-          </Link>
+          ) : null}
         </div>
+        {/* Right column: helpful tips / profile meta */}
+        <aside className="bg-gray-800/60 backdrop-blur rounded-2xl p-6 border border-gray-700 h-max">
+          <div className="text-xl font-semibold mb-3 tracking-tight">
+            Profile Tips
+          </div>
+          <ul className="list-disc list-inside text-sm text-gray-300 space-y-2">
+            <li>Use a clear profile photo for better recognition.</li>
+            <li>Pick a unique username you can share with friends.</li>
+            <li>Passwords must be at least 8 characters.</li>
+          </ul>
+          <div className="mt-4 text-sm text-gray-400">
+            Changes aren’t saved until you click &quot;Save changes&quot;.
+          </div>
+          <div className="mt-6 text-sm">
+            <Link
+              href="/"
+              onClick={(e) => handleNav(e, "/")}
+              className="link-accent hover:underline"
+            >
+              Back to Home
+            </Link>
+          </div>
+        </aside>
       </div>
+
       {showGuard && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[92vw] max-w-md bg-gray-900 border border-gray-700 rounded-xl p-5 text-white">
@@ -354,6 +470,55 @@ export default function ProfilePage() {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden file input for avatar changes */}
+      <input
+        ref={avatarFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={onAvatarFileSelected}
+      />
+
+      {/* Viewer modal */}
+      {showAvatarViewer && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          onClick={() => setShowAvatarViewer(false)}
+        >
+          <div
+            className="relative max-w-[90vw] max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {stagedAvatarRemove ? (
+              <div className="text-gray-300">No profile picture</div>
+            ) : stagedAvatarPreviewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={stagedAvatarPreviewUrl}
+                alt="Profile picture preview"
+                className="max-w-full max-h-[80vh] rounded-lg border border-gray-700"
+              />
+            ) : data?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={data.avatar_url}
+                alt="Profile picture"
+                className="max-w-full max-h-[80vh] rounded-lg border border-gray-700"
+              />
+            ) : (
+              <div className="text-gray-300">No profile picture</div>
+            )}
+            <button
+              onClick={() => setShowAvatarViewer(false)}
+              className="absolute -top-3 -right-3 bg-gray-900 border border-gray-700 text-white rounded-full w-8 h-8 grid place-items-center hover:bg-gray-800"
+              aria-label="Close"
+            >
+              ×
+            </button>
           </div>
         </div>
       )}

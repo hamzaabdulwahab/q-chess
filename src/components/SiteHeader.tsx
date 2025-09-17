@@ -20,7 +20,7 @@ export function SiteHeader() {
             (isHome ? "text-accent" : "text-gray-200 hover:text-accent")
           }
         >
-          For My Queen
+          Q-Chess
         </Link>
         <UserMenu />
       </div>

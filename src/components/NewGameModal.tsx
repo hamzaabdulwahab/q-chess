@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-export type NewGameChoice = "local-2v2" | "online" | "invite" | null;
+export type NewGameChoice = "local-2v2" | null;
 
 export function NewGameModal({
   open,
@@ -49,20 +49,11 @@ export function NewGameModal({
             onClick={() => onChoose("local-2v2")}
             className="w-full btn-accent text-black px-4 py-3 rounded-lg transition-colors font-medium"
           >
-            2 vs 2 on this machine
+            Human vs Human
           </button>
-          <button
-            onClick={() => onChoose("online")}
-            className="w-full bg-gray-800 hover:bg-gray-700 text-white px-4 py-3 rounded-lg transition-colors font-medium"
-          >
-            Play online with someone
-          </button>
-          <button
-            onClick={() => onChoose("invite")}
-            className="w-full bg-gray-800 hover:bg-gray-700 text-white px-4 py-3 rounded-lg transition-colors font-medium"
-          >
-            Invite by username
-          </button>
+          {/* Invite-create option removed */}
+          {/* Invites inbox option removed */}
+          {/* Vs Computer option removed */}
           <button
             onClick={onClose}
             className="w-full bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm"

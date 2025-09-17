@@ -6,28 +6,16 @@ export type PlayerBadgeProps = {
   name?: string | null;
   username?: string | null;
   avatarUrl?: string | null;
-  timeMs: number;
   active?: boolean;
   align?: "top-left" | "bottom-right";
   color?: "white" | "black";
   absolute?: boolean;
 };
 
-function mmss(ms: number) {
-  const m = Math.floor(ms / 60000)
-    .toString()
-    .padStart(2, "0");
-  const s = Math.floor((ms % 60000) / 1000)
-    .toString()
-    .padStart(2, "0");
-  return `${m}:${s}`;
-}
-
 export function PlayerBadge({
   name,
   username,
   avatarUrl,
-  timeMs,
   active = false,
   align = "top-left",
   color,
@@ -37,7 +25,7 @@ export function PlayerBadge({
     align === "top-left"
       ? "top-2 left-2"
       : "bottom-2 right-2 flex-row-reverse text-right";
-  const borderClass = active ? "border-violet-500" : "border-gray-700";
+  const borderClass = active ? "border-violet-500 border-2 shadow-violet-500/50" : "border-gray-700";
   const label =
     name || (color ? `${color[0].toUpperCase()}${color.slice(1)}` : "Player");
   const uname = username ? `@${username}` : undefined;
@@ -56,11 +44,6 @@ export function PlayerBadge({
         <div className="min-w-0">
           <div className="text-sm text-white truncate leading-5">{label}</div>
           <div className="text-xs text-accent truncate">{uname}</div>
-        </div>
-        <div
-          className={`ml-2 px-2 py-1 rounded border ${borderClass} text-accent text-sm font-mono`}
-        >
-          {mmss(timeMs)}
         </div>
       </div>
     </div>

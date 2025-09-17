@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import {
   RefreshCw,
   Play,
@@ -12,10 +12,15 @@ import {
   HelpCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { Alert } from "@/components/Alert";
 import { NewGameModal, type NewGameChoice } from "@/components/NewGameModal";
-import { InviteDialog } from "@/components/InviteDialog";
+import {
+  ArchiveFilters,
+  type Category,
+  type Winner,
+} from "@/components/ArchiveFilters";
 
 interface Game {
   id: number;
@@ -29,12 +34,30 @@ interface Game {
 }
 
 export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center text-accent">
+          Loading...
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [showNewGameModal, setShowNewGameModal] = useState(false);
-  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [category, setCategory] = useState<Category>("all");
+  const [winner, setWinner] = useState<Winner>("all");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     // Check auth first; if not signed in, send to signin
@@ -58,6 +81,13 @@ export default function Home() {
     try {
       setLoading(true);
       const response = await fetch("/api/games");
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const data = await response.json();
 
       if (response.ok) {
@@ -79,6 +109,13 @@ export default function Home() {
       const response = await fetch("/api/games", {
         method: "POST",
       });
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const data = await response.json();
 
       if (response.ok) {
@@ -108,8 +145,14 @@ export default function Home() {
       if (response.ok) {
         setGames(games.filter((game) => game.id !== gameId));
       } else {
-        const data = await response.json();
-        setError(data.error || "Failed to delete game");
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          setError(data.error || "Failed to delete game");
+        } else {
+          setError("Failed to delete game - server error");
+        }
       }
     } catch (err) {
       setError("Failed to delete game");
@@ -121,19 +164,9 @@ export default function Home() {
     setShowNewGameModal(false);
     if (!choice) return;
 
-    switch (choice) {
-      case "local-2v2":
-        // Create a traditional local database game
-        await createNewGame();
-        break;
-      case "online":
-        // Go to online multiplayer page
-        window.location.href = "/online";
-        break;
-      case "invite":
-        // Open the invite dialog
-        setShowInviteDialog(true);
-        break;
+    if (choice === "local-2v2") {
+      // Create a traditional local database game
+      await createNewGame();
     }
   };
 
@@ -178,6 +211,55 @@ export default function Home() {
     }
   };
 
+  // Initialize filters from URL once
+  useEffect(() => {
+    const cat = (searchParams.get("cat") || "").toLowerCase();
+    const win = (searchParams.get("win") || "").toLowerCase();
+    const cats: Category[] = [
+      "all",
+      "active",
+      "completed",
+      "checkmate",
+      "draw",
+      "stalemate",
+    ];
+    const wins: Winner[] = ["all", "white", "black", "draw", "none"];
+    if (cats.includes(cat as Category)) setCategory(cat as Category);
+    if (wins.includes(win as Winner)) setWinner(win as Winner);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist filters to URL when they change
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (category === "all") params.delete("cat");
+    else params.set("cat", category);
+    if (winner === "all") params.delete("win");
+    else params.set("win", winner);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [category, winner, pathname, router, searchParams]);
+
+  const filteredGames = React.useMemo(() => {
+    const completedStatuses = new Set(["checkmate", "stalemate", "draw"]);
+    return games.filter((g) => {
+      if (category === "active" && g.status !== "active") return false;
+      if (category === "completed" && !completedStatuses.has(g.status))
+        return false;
+      if (category === "checkmate" && g.status !== "checkmate") return false;
+      if (category === "draw" && g.status !== "draw") return false;
+      if (category === "stalemate" && g.status !== "stalemate") return false;
+      if (winner !== "all") {
+        if (winner === "none") {
+          if (g.winner) return false;
+        } else {
+          if ((g.winner || "").toLowerCase() !== winner) return false;
+        }
+      }
+      return true;
+    });
+  }, [games, category, winner]);
+
   if (authed === null || loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -190,13 +272,13 @@ export default function Home() {
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="relative text-center mb-12">
           <div className="relative">
             <h1 className="text-6xl md:text-7xl font-bold mb-4 bg-gradient-to-r from-violet-300 via-violet-200 to-fuchsia-300 bg-clip-text text-transparent">
-              ♔ For My Queen ♛
+              ♔ Q-Chess ♛
             </h1>
             <div className="absolute inset-0 text-6xl md:text-7xl font-bold bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-600 bg-clip-text text-transparent blur-sm opacity-30">
-              ♔ For My Queen ♛
+              ♔ Q-Chess ♛
             </div>
           </div>
           <p className="text-accent text-xl font-medium">
@@ -246,6 +328,18 @@ export default function Home() {
             </button>
           </div>
 
+          <div className="sticky top-20 z-30">
+            <ArchiveFilters
+              className="mb-6"
+              category={category}
+              onCategoryChange={setCategory}
+              winner={winner}
+              onWinnerChange={setWinner}
+              total={games.length}
+              filtered={filteredGames.length}
+            />
+          </div>
+
           {games.length === 0 ? (
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-accent/30 rounded-xl p-8 text-center shadow-2xl">
               <div className="text-7xl mb-4">♔</div>
@@ -264,7 +358,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {games.map((game) => (
+              {filteredGames.map((game) => (
                 <div
                   key={game.id}
                   className="bg-gradient-to-br from-gray-800 to-gray-900 border border-accent/20 rounded-xl p-6 hover:border-accent transition-all duration-300 transform hover:scale-105 shadow-xl hover:shadow-violet-600/20"
@@ -278,7 +372,7 @@ export default function Home() {
                         <span>{getStatusIcon(game.status)}</span>
                         <span
                           className={`text-sm font-medium ${getStatusColor(
-                            game.status
+                            game.status,
                           )}`}
                         >
                           {game.status.charAt(0).toUpperCase() +
@@ -345,18 +439,14 @@ export default function Home() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Modals */}
-      <NewGameModal
-        open={showNewGameModal}
-        onClose={() => setShowNewGameModal(false)}
-        onChoose={handleNewGameChoice}
-      />
-      <InviteDialog
-        open={showInviteDialog}
-        onClose={() => setShowInviteDialog(false)}
-      />
+        {/* Modals */}
+        <NewGameModal
+          open={showNewGameModal}
+          onClose={() => setShowNewGameModal(false)}
+          onChoose={handleNewGameChoice}
+        />
+      </div>
     </div>
   );
 }

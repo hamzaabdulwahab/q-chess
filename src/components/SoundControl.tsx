@@ -10,10 +10,12 @@ import { soundManager } from "@/lib/sound-manager";
 
 interface SoundControlProps {
   className?: string;
+  variant?: "panel" | "compact"; // compact: inline toggle without dropdown panel
 }
 
 export const SoundControl: React.FC<SoundControlProps> = ({
   className = "",
+  variant = "panel",
 }) => {
   const [isEnabled, setIsEnabled] = useState(true);
   const [volume, setVolume] = useState(0.5);
@@ -59,6 +61,21 @@ export const SoundControl: React.FC<SoundControlProps> = ({
     );
   };
 
+  if (variant === "compact") {
+    // Inline compact toggle only (no dropdown panel)
+    return (
+      <button
+        onClick={toggleSound}
+        className={`flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-medium ${className}`}
+        title={isEnabled ? "Sound On" : "Sound Off"}
+      >
+        <span className="text-lg">{isEnabled ? "🔊" : "🔇"}</span>
+        <span>{isEnabled ? "Sound On" : "Sound Off"}</span>
+      </button>
+    );
+  }
+
+  // Default: dropdown panel variant
   return (
     <div className={`relative ${className}`}>
       {/* Sound Toggle Button */}

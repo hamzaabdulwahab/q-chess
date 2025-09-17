@@ -24,13 +24,13 @@ export function UserMenu() {
           ) {
             e.preventDefault();
             window.dispatchEvent(
-              new CustomEvent("profile-guard", { detail: { href: "/" } })
+              new CustomEvent("profile-guard", { detail: { href: "/" } }),
             );
           }
         }}
         className={isHome ? "text-accent" : "text-gray-300 hover:text-white"}
       >
-        For My Queen
+        Q-Chess
       </Link>
       <Link
         href="/profile"
@@ -40,7 +40,9 @@ export function UserMenu() {
           ) {
             e.preventDefault();
             window.dispatchEvent(
-              new CustomEvent("profile-guard", { detail: { href: "/profile" } })
+              new CustomEvent("profile-guard", {
+                detail: { href: "/profile" },
+              }),
             );
           }
         }}

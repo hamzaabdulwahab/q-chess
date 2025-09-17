@@ -1,11 +1,24 @@
 import type { Metadata } from "next";
-import { Poppins, Geist_Mono } from "next/font/google";
+import { Poppins, Geist_Mono, Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import { AuthHydrator } from "@/components/AuthHydrator";
 import { FloatingUserMenu } from "@/components/FloatingUserMenu";
+import { ThemeProvider } from "@/lib/theme-context";
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 const poppins = Poppins({
-  variable: "--font-sans",
+  variable: "--font-poppins",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const playfair = Playfair_Display({
+  variable: "--font-heading",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
@@ -16,7 +29,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "For My Queen - Chess Game",
+  title: "Q-Chess - Chess Game",
   description: "Play chess with advanced game tracking and analysis",
 };
 
@@ -27,12 +40,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${poppins.variable} ${geistMono.variable} antialiased`}>
-        <AuthHydrator />
-        <div className="min-h-screen flex flex-col">
-          <FloatingUserMenu />
-          <main className="flex-1">{children}</main>
-        </div>
+      <body
+        className={`${inter.variable} ${poppins.variable} ${geistMono.variable} ${playfair.variable} antialiased`}
+      >
+        <ThemeProvider>
+          <AuthHydrator />
+          <div className="min-h-screen flex flex-col">
+            <FloatingUserMenu />
+            <main className="flex-1">{children}</main>
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );

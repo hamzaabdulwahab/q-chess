@@ -74,7 +74,17 @@ export async function POST(
       return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
     }
 
-    const { from, to, promotion } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { from, to, promotion, clientMoveId, expectedPly, prevFen, san } =
+      body as {
+        from?: string;
+        to?: string;
+        promotion?: string;
+        clientMoveId?: string;
+        expectedPly?: number;
+        prevFen?: string;
+        san?: string;
+      };
 
     if (!from || !to) {
       return NextResponse.json(
@@ -90,9 +100,29 @@ export async function POST(
     }
 
     // Create chess service instance with current position
-    const chessService = new ChessService(
-      (game as unknown as { fen: string }).fen
-    );
+    const currentFen = (game as unknown as { fen: string }).fen;
+    const chessService = new ChessService(currentFen);
+
+    // Optional idempotency/ordering checks
+    if (typeof expectedPly === "number") {
+      const currentHistoryLen = chessService.chess.history().length;
+      if (currentHistoryLen !== expectedPly - 1) {
+        return NextResponse.json(
+          {
+            error: `Move order conflict: expected ply ${
+              expectedPly - 1
+            }, found ${currentHistoryLen}`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+    if (prevFen && prevFen.trim() !== currentFen.trim()) {
+      return NextResponse.json(
+        { error: "Position conflict: stale client state" },
+        { status: 409 }
+      );
+    }
 
     // Make the move
     const result = await chessService.makeMove(gameId, from, to, promotion);
@@ -101,7 +131,11 @@ export async function POST(
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      clientMoveId: clientMoveId ?? null,
+      san: result.san ?? san,
+    });
   } catch (error) {
     console.error("Error making move:", error);
     return NextResponse.json({ error: "Failed to make move" }, { status: 500 });
@@ -142,9 +176,14 @@ export async function PATCH(
       );
     }
 
+    const updatePayload: Record<string, unknown> = {
+      status,
+      winner: winner ?? null,
+    };
+
     const { error } = await supabase
       .from("games")
-      .update({ status, winner: winner ?? null })
+      .update(updatePayload)
       .eq("id", gameId);
 
     if (error) {

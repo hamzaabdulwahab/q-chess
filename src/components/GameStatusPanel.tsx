@@ -28,26 +28,7 @@ export const GameStatusPanel: React.FC<GameStatusPanelProps> = ({
 
   return (
     <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 w-80 text-white">
-      {/* Game Timer */}
-      <div className="mb-6">
-        <div className="bg-gray-900 rounded-lg p-4 text-center">
-          <div className="flex items-center justify-center space-x-2 mb-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-            <span className="text-sm font-medium">GAME TIME</span>
-            <div
-              className={`w-2 h-2 rounded-full ${
-                gameStatus === "active"
-                  ? "bg-green-500 animate-pulse"
-                  : "bg-gray-500"
-              }`}
-            ></div>
-          </div>
-          <div className="text-3xl font-bold">7:23</div>
-          <div className="text-sm text-green-400 uppercase">
-            {gameStatus === "active" ? "RUNNING" : gameStatus.toUpperCase()}
-          </div>
-        </div>
-      </div>
+      {/* Timer removed */}
 
       {/* Game Info */}
       <div className="mb-6 space-y-2">

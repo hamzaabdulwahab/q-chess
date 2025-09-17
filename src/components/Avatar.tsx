@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 type AvatarProps = {
   name?: string | null;
@@ -18,24 +19,33 @@ export function Avatar({ name, url, size = 40 }: AvatarProps) {
   const px = `${size}px`;
   if (url) {
     return (
-      <img
+      <Image
         src={url}
         alt={name || "avatar"}
         width={size}
         height={size}
+        unoptimized
         className="rounded-full object-cover border border-gray-700"
         style={{ width: px, height: px }}
       />
     );
   }
 
+  const fontSize =
+    size >= 96
+      ? "text-2xl"
+      : size >= 72
+      ? "text-xl"
+      : size >= 56
+      ? "text-lg"
+      : "text-xs";
   return (
     <div
       className="rounded-full bg-gray-700 text-white grid place-items-center border border-gray-700"
       style={{ width: px, height: px }}
       aria-label="avatar"
     >
-      <span className="text-xs font-semibold">{initials}</span>
+      <span className={`${fontSize} font-semibold`}>{initials}</span>
     </div>
   );
 }
