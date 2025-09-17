@@ -35,6 +35,7 @@ interface PieceProps {
 
 const Piece: React.FC<PieceProps> = ({ piece }) => {
   const [imageError, setImageError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   
   // Map pieces to image filenames (PNG assets in public/pieces)
   // Inverted as requested: white pieces render black images and black pieces render white images
@@ -68,28 +69,43 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
     bP: "♟",
   };
 
-  const imagePath = `/pieces/${pieceImages[piece]}`;
+  // Try different image path approaches
+  const getImagePath = () => {
+    const filename = pieceImages[piece];
+    if (!filename) return null;
+    
+    // For production, try the direct path
+    return `/pieces/${filename}`;
+  };
+
+  const imagePath = getImagePath();
   const color = piece[0] === "w" ? "text-white" : "text-gray-300";
 
   // Reset error state when piece changes
   useEffect(() => {
     setImageError(false);
+    setRetryCount(0);
   }, [piece]);
 
   // Handle image loading
   const handleImageLoad = () => {
-    console.log(`Successfully loaded piece image: ${imagePath}`);
+    console.log(`✅ Successfully loaded piece image: ${imagePath}`);
+    setImageError(false);
   };
 
   const handleImageError = () => {
-    console.error(`Failed to load piece image: ${imagePath}`);
-    console.error(`Full URL would be: ${window.location.origin}${imagePath}`);
+    console.error(`❌ Failed to load piece image: ${imagePath}`);
+    if (typeof window !== 'undefined') {
+      console.error(`Full URL attempted: ${window.location.origin}${imagePath}`);
+    }
+    console.log(`💥 Using fallback symbol for ${piece}`);
     setImageError(true);
   };
 
+  // Always try to load image first, fallback to symbol if error
   return (
     <div className="flex items-center justify-center w-full h-full select-none pointer-events-none">
-      {!imageError ? (
+      {!imageError && imagePath ? (
         <img
           src={imagePath}
           alt={piece}

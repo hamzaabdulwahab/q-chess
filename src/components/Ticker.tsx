@@ -10,7 +10,7 @@ type TickerProps = {
 
 export function Ticker({
   src = "/ticker.txt",
-  speed = 50,
+  speed = 20,
   gap = 20,
 }: TickerProps) {
   const [lines, setLines] = useState<string[]>([]);
