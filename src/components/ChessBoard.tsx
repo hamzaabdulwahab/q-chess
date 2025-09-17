@@ -733,6 +733,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           setPossibleMoves(chessService.getPossibleMoves(square));
         } else {
           // Deselect if clicking on opponent's piece or empty square
+          // Play illegal move sound if trying to move to an invalid square
+          if (selectedSquare) {
+            soundManager.play("illegal-move");
+          }
           setSelectedSquare(null);
           setPossibleMoves([]);
         }
@@ -740,6 +744,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         // Select a piece
         setSelectedSquare(square);
         setPossibleMoves(chessService.getPossibleMoves(square));
+      } else if (piece && piece[0] !== gameState.turn.charAt(0)) {
+        // Trying to select opponent's piece - play illegal move sound
+        soundManager.play("illegal-move");
       }
     },
     [
