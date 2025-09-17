@@ -10,17 +10,17 @@
     1. Extensions
     2. Helper functions (updated_at trigger)
     3. profiles table + Row Level Security (RLS)
-    4. games table + RLS
-    5. moves table + RLS
+    4. games table + RLS with user ownership
+    5. moves table + RLS with game ownership
     6. Storage (avatars bucket + policies)
     7. Legacy cleanup (remove deprecated columns / invites)
     8. Verification queries (commented)
 
   Notes:
     - Invites/online play were removed. A legacy removal section is included (commented).
-    - Ownership for games is intentionally open (any authenticated user can manage).
-      To lock games to creators, add a user_id column + adjust policies.
-    - If you want strict auditing, add more columns (e.g., last_move_at, created_by).
+    - Games are now owned by users (user_id column) with proper RLS policies for privacy.
+    - Users can only see/modify their own games and related moves.
+    - Row Level Security ensures data isolation at the database level.
 */
 
 ------------------------------------------------------------
@@ -157,9 +157,14 @@ create table if not exists public.games (
   winner         text
                  check (winner is null or winner in ('white','black','draw')),
   move_count     int not null default 0,
+  user_id        uuid references auth.users(id) on delete cascade,
   created_at     timestamptz not null default timezone('utc', now()),
   updated_at     timestamptz not null default timezone('utc', now())
 );
+
+-- Add user_id column if missing (for existing databases)
+alter table public.games
+  add column if not exists user_id uuid references auth.users(id) on delete cascade;
 
 -- Add updated_at if missing
 alter table public.games
@@ -190,18 +195,30 @@ begin
 end;
 $$;
 
-create policy games_select_public
+-- User-specific policies for games (users can only see/modify their own games)
+create policy games_select_own
   on public.games for select
-  to anon, authenticated
-  using (true);
-
-create policy games_write_authenticated
-  on public.games for all
   to authenticated
-  using (true)
-  with check (true);
+  using (auth.uid() = user_id);
+
+create policy games_insert_own
+  on public.games for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+create policy games_update_own
+  on public.games for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy games_delete_own
+  on public.games for delete
+  to authenticated
+  using (auth.uid() = user_id);
 
 create index if not exists idx_games_updated_at on public.games(updated_at desc);
+create index if not exists idx_games_user_id on public.games(user_id);
 
 ------------------------------------------------------------
 -- 5. MOVES
@@ -247,16 +264,50 @@ begin
 end;
 $$;
 
-create policy moves_select_public
+-- User-specific policies for moves (users can only see/modify moves for games they own)
+create policy moves_select_own_game
   on public.moves for select
-  to anon, authenticated
-  using (true);
-
-create policy moves_write_authenticated
-  on public.moves for all
   to authenticated
-  using (true)
-  with check (true);
+  using (
+    exists (
+      select 1 from public.games 
+      where games.id = moves.game_id 
+      and games.user_id = auth.uid()
+    )
+  );
+
+create policy moves_insert_own_game
+  on public.moves for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from public.games 
+      where games.id = moves.game_id 
+      and games.user_id = auth.uid()
+    )
+  );
+
+create policy moves_update_own_game
+  on public.moves for update
+  to authenticated
+  using (
+    exists (
+      select 1 from public.games 
+      where games.id = moves.game_id 
+      and games.user_id = auth.uid()
+    )
+  );
+
+create policy moves_delete_own_game
+  on public.moves for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from public.games 
+      where games.id = moves.game_id 
+      and games.user_id = auth.uid()
+    )
+  );
 
 create index if not exists idx_moves_game_id on public.moves(game_id);
 create index if not exists idx_moves_game_id_number on public.moves(game_id, move_number);

@@ -75,9 +75,11 @@ export default function SignIn() {
           }
           const data = await res.json();
           email = data.email;
-        } catch (usernameError) {
+        } catch (error) {
           // If username lookup fails, suggest using email
+          const errorMsg = error instanceof Error ? error.message : "Username lookup failed";
           throw new Error(
+            errorMsg.includes("unavailable") ? errorMsg : 
             "Unable to find username. Please sign in with your email address instead."
           );
         }
