@@ -454,17 +454,22 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               });
               const result = await response.json().catch(() => null);
               if (response.ok && result && result.success) {
-                const newChessService = new ChessClient(result.fen);
-                setChessService(newChessService);
-                const s = newChessService.getGameStatus();
-                setGameState({
-                  fen: result.fen,
-                  turn: newChessService.getCurrentTurn(),
-                  inCheck: s.isInCheck && result.gameStatus === "active",
-                  gameOver: result.gameStatus !== "active",
-                  winner: result.winner,
-                  skipEndScreen: false,
-                });
+                // Only update if the server FEN is different from our current optimistic state
+                const currentFen = chessService.getFen();
+                if (result.fen !== currentFen) {
+                  const newChessService = new ChessClient(result.fen);
+                  setChessService(newChessService);
+                  const s = newChessService.getGameStatus();
+                  setGameState({
+                    fen: result.fen,
+                    turn: newChessService.getCurrentTurn(),
+                    inCheck: s.isInCheck && result.gameStatus === "active",
+                    gameOver: result.gameStatus !== "active",
+                    winner: result.winner,
+                    skipEndScreen: false,
+                  });
+                }
+                // If FEN matches, our optimistic update was correct, no need to re-render
               } else if (response.ok && result && result.success === false) {
                 // Server asserts move is illegal -> revert
                 soundManager.play("illegal-move");
@@ -710,17 +715,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           setSelectedSquare(null);
           setPossibleMoves([]);
         } else if (possibleMoves.includes(square)) {
+          // Clear selection immediately for responsive UI
+          setSelectedSquare(null);
+          setPossibleMoves([]);
+          
           // Check if this is a promotion move
           if (isPromotionMove(selectedSquare, square)) {
             setPendingMove({ from: selectedSquare, to: square });
             setShowPromotionModal(true);
           } else {
             // Make a regular move (including en passant and castling)
-            const result = await makeMove(selectedSquare, square);
-            if (result.success) {
-              setSelectedSquare(null);
-              setPossibleMoves([]);
-            }
+            await makeMove(selectedSquare, square);
           }
         } else if (piece && piece[0] === gameState.turn.charAt(0)) {
           // Select a new piece of the same color
