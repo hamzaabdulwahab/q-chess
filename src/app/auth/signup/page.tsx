@@ -246,7 +246,7 @@ export default function SignUp() {
               required
             />
             <p className="text-xs text-gray-400 mt-1">
-              We&apos;ll send confirmations and magic links here.
+              We&apos;ll send confirmations here.
             </p>
           </div>
 
