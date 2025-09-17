@@ -10,7 +10,7 @@ type TickerProps = {
 
 export function Ticker({
   src = "/ticker.txt",
-  speed = 5,
+  speed = 50,
   gap = 20,
 }: TickerProps) {
   const [lines, setLines] = useState<string[]>([]);
@@ -81,7 +81,9 @@ export function Ticker({
       const distance = width * 0.5; // we translate -50%
       const sec = speed > 0 ? distance / speed : 40;
       // Minimal clamp so very high speeds are reflected
-      setDurationSec(Math.max(0.5, sec));
+      const finalDuration = Math.max(0.5, sec);
+      console.log(`📊 Ticker calc: width=${width}px, distance=${distance}px, speed=${speed}px/s, duration=${finalDuration}s`);
+      setDurationSec(finalDuration);
     };
     // Delay to ensure layout is ready
     const t = setTimeout(calc, 0);
@@ -99,15 +101,19 @@ export function Ticker({
 
   // Inline CSS variables to control speed/gap
   const style = useMemo(
-    () =>
-      ({
+    () => {
+      const finalStyle = {
         // speed is pixels per second; animation duration depends on track width via CSS
         ["--ticker-gap"]: `${gap}px`,
         ["--ticker-duration"]: durationSec ? `${durationSec}s` : undefined,
         // Inline overrides to guarantee the class animation properties are updated
         animationDuration: durationSec ? `${durationSec}s` : undefined,
         animationPlayState: "running",
-      } as React.CSSProperties),
+      } as React.CSSProperties;
+      
+      console.log(`🎬 Ticker style applied:`, finalStyle);
+      return finalStyle;
+    },
     [gap, durationSec]
   );
 
