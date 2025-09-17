@@ -76,6 +76,17 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
     setImageError(false);
   }, [piece]);
 
+  // Handle image loading
+  const handleImageLoad = () => {
+    console.log(`Successfully loaded piece image: ${imagePath}`);
+  };
+
+  const handleImageError = () => {
+    console.error(`Failed to load piece image: ${imagePath}`);
+    console.error(`Full URL would be: ${window.location.origin}${imagePath}`);
+    setImageError(true);
+  };
+
   return (
     <div className="flex items-center justify-center w-full h-full select-none pointer-events-none">
       {!imageError ? (
@@ -87,13 +98,8 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
           className="chess-piece-image max-w-full max-h-full object-contain"
           data-color={piece[0] === "w" ? "white" : "black"}
           draggable={false}
-          onError={() => {
-            console.log(`Failed to load piece image: ${imagePath}`);
-            setImageError(true);
-          }}
-          onLoad={() => {
-            console.log(`Successfully loaded piece image: ${imagePath}`);
-          }}
+          onError={handleImageError}
+          onLoad={handleImageLoad}
         />
       ) : (
         <div
