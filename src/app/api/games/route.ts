@@ -4,7 +4,18 @@ import { getSupabaseServer } from "@/lib/supabase-server";
 
 export async function GET() {
   try {
-    const games = await ChessService.getAllGames();
+    // Require authentication for viewing games
+    const supabase = getSupabaseServer();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get only the current user's games
+    const games = await ChessService.getUserGames(user.id);
     return NextResponse.json({ games });
   } catch (error) {
     console.error("Error fetching games:", error);

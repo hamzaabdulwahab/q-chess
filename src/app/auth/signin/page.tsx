@@ -54,25 +54,33 @@ export default function SignIn() {
       let email = raw;
       const looksLikeEmail = /.+@.+\..+/.test(raw);
       if (!looksLikeEmail) {
-        const res = await fetch("/api/resolve-username", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: raw.toLowerCase() }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (
-            res.status === 503 &&
-            data?.error === "username_lookup_unavailable"
-          ) {
-            throw new Error(
-              "Server not configured for username sign-in. Use your email."
-            );
+        // Try username lookup, but fall back gracefully
+        try {
+          const res = await fetch("/api/resolve-username", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: raw.toLowerCase() }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            if (
+              res.status === 503 &&
+              data?.error === "username_lookup_unavailable"
+            ) {
+              throw new Error(
+                "Username lookup is currently unavailable. Please sign in with your email address instead."
+              );
+            }
+            throw new Error(data?.error || "Username not found. Please use your email address.");
           }
-          throw new Error(data?.error || "Username not found");
+          const data = await res.json();
+          email = data.email;
+        } catch (usernameError) {
+          // If username lookup fails, suggest using email
+          throw new Error(
+            "Unable to find username. Please sign in with your email address instead."
+          );
         }
-        const data = await res.json();
-        email = data.email;
       }
       const { error: signErr } = await supabase.auth.signInWithPassword({
         email,
@@ -135,7 +143,7 @@ export default function SignIn() {
       <div className="w-full max-w-md bg-gray-800/60 backdrop-blur rounded-xl p-6 border border-gray-700">
         <h1 className="text-2xl font-semibold mb-2">Sign in</h1>
         <p className="text-sm text-gray-300 mb-6">
-          Enter your username and password.
+          Enter your email address and password. Username login may be temporarily unavailable.
         </p>
         {error && (
           <div aria-live="polite">
@@ -154,12 +162,12 @@ export default function SignIn() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-gray-300 mb-1">
-              Username or Email
+              Email (Recommended) or Username
             </label>
             <div className="flex items-center rounded-lg bg-gray-900 border border-gray-700 focus-within:border-accent">
               <input
                 className="w-full bg-transparent px-3 py-2 outline-none"
-                placeholder="yourname or you@example.com"
+                placeholder="you@example.com or username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 autoComplete="username"
@@ -167,7 +175,7 @@ export default function SignIn() {
               />
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              Enter your username or email.
+              Email address is recommended for reliable sign-in.
             </p>
           </div>
           <div>

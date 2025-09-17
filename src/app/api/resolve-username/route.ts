@@ -5,7 +5,15 @@ export async function POST(req: NextRequest) {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    console.log("Environment check:", {
+      hasUrl: !!url,
+      hasService: !!service,
+      url: url ? `${url.substring(0, 30)}...` : 'undefined'
+    });
+    
     if (!url || !service) {
+      console.error("Missing environment variables:", { url: !!url, service: !!service });
       return NextResponse.json(
         { error: "username_lookup_unavailable" },
         { status: 503 }

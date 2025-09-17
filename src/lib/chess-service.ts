@@ -9,10 +9,22 @@ export class ChessService {
   }
 
   // Create a new game
-  static async createNewGame(): Promise<number> {
+  static async createNewGame(userId?: string): Promise<number> {
     const supabase = await getSupabaseServer();
     const chess = new Chess();
     const initialFen = chess.fen();
+
+    // If no userId provided, get current user
+    let gameUserId = userId;
+    if (!gameUserId) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("User must be authenticated to create a game");
+      }
+      gameUserId = user.id;
+    }
 
     const { data, error } = await supabase
       .from("games")
@@ -23,6 +35,7 @@ export class ChessService {
         current_player: "white",
         winner: null,
         move_count: 0,
+        user_id: gameUserId,
       })
       .select("id")
       .single();
@@ -82,6 +95,43 @@ export class ChessService {
     const { data: games, error } = await supabase
       .from("games")
       .select("*")
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const gamesWithMoves = await Promise.all(
+      (games || []).map(async (game: Record<string, unknown>) => {
+        const { data: moveRows } = await supabase
+          .from("moves")
+          .select("*")
+          .eq("game_id", (game as unknown as { id: number }).id)
+          .order("move_number", { ascending: true });
+
+        return {
+          ...(game as Record<string, unknown>),
+          moves: (moveRows as Record<string, unknown>[]) || [],
+          totalMoves: (moveRows?.length as number) || 0,
+        };
+      })
+    );
+
+    return gamesWithMoves;
+  }
+
+  // Get games for a specific user
+  static async getUserGames(userId: string): Promise<
+    (Record<string, unknown> & {
+      moves: Record<string, unknown>[];
+      totalMoves: number;
+    })[]
+  > {
+    const supabase = await getSupabaseServer();
+    const { data: games, error } = await supabase
+      .from("games")
+      .select("*")
+      .eq("user_id", userId)
       .order("updated_at", { ascending: false });
 
     if (error) {
