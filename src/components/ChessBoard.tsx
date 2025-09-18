@@ -219,7 +219,7 @@ const Square: React.FC<SquareProps> = ({
         <>
           {fileLabel && (
             <div
-              className="coord absolute bottom-1 left-1 text-sm font-bold z-20"
+              className="coord absolute bottom-1 left-1 text-base font-bold z-20"
               style={{ color: coordColor }}
             >
               {fileLabel}
@@ -227,7 +227,7 @@ const Square: React.FC<SquareProps> = ({
           )}
           {rankLabel && (
             <div
-              className="coord absolute top-1 left-1 text-sm font-bold z-20"
+              className="coord absolute top-1 left-1 text-base font-bold z-20"
               style={{ color: coordColor }}
             >
               {rankLabel}
