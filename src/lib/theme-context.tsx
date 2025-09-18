@@ -18,6 +18,7 @@ export interface ChessTheme {
 }
 
 export const chessThemes: ChessTheme[] = [
+  // Existing themes
   {
     id: 'dark',
     name: 'Dark Night',
@@ -48,7 +49,7 @@ export const chessThemes: ChessTheme[] = [
   },
   {
     id: 'green',
-    name: 'Chess.com Green',
+    name: 'Forest Green',
     lightSquare: '#eeeed2',
     darkSquare: '#769656',
     lightHover: '#f6f6dc',
@@ -171,6 +172,78 @@ export const chessThemes: ChessTheme[] = [
     lastMoveHighlight: 'rgba(236, 72, 153, 0.6)',
     moveHighlight: 'rgba(236, 72, 153, 0.4)',
     description: 'Elegant rose and pink tones'
+  },
+
+  // New themes inspired by your screenshot
+  {
+    id: 'slate',
+    name: 'Slate Grey',
+    lightSquare: '#d1d5db',
+    darkSquare: '#374151',
+    lightHover: '#e5e7eb',
+    darkHover: '#4b5563',
+    lightCoord: '#111827',
+    darkCoord: '#f9fafb',
+    borderColor: '#6b7280',
+    lastMoveHighlight: 'rgba(209, 213, 219, 0.6)',
+    moveHighlight: 'rgba(209, 213, 219, 0.4)',
+    description: 'Modern slate grey tones'
+  },
+  {
+    id: 'marble',
+    name: 'Marble White',
+    lightSquare: '#f9fafb',
+    darkSquare: '#9ca3af',
+    lightHover: '#f3f4f6',
+    darkHover: '#6b7280',
+    lightCoord: '#374151',
+    darkCoord: '#f9fafb',
+    borderColor: '#9ca3af',
+    lastMoveHighlight: 'rgba(156, 163, 175, 0.5)',
+    moveHighlight: 'rgba(156, 163, 175, 0.3)',
+    description: 'Polished marble theme'
+  },
+  {
+    id: 'metal',
+    name: 'Brushed Metal',
+    lightSquare: '#e5e7eb',
+    darkSquare: '#9ca3af',
+    lightHover: '#f3f4f6',
+    darkHover: '#6b7280',
+    lightCoord: '#1f2937',
+    darkCoord: '#f9fafb',
+    borderColor: '#6b7280',
+    lastMoveHighlight: 'rgba(107, 114, 128, 0.5)',
+    moveHighlight: 'rgba(107, 114, 128, 0.3)',
+    description: 'Industrial brushed steel finish'
+  },
+  {
+    id: 'sand',
+    name: 'Sandy Desert',
+    lightSquare: '#fef3c7',
+    darkSquare: '#d97706',
+    lightHover: '#fde68a',
+    darkHover: '#b45309',
+    lightCoord: '#78350f',
+    darkCoord: '#fef3c7',
+    borderColor: '#92400e',
+    lastMoveHighlight: 'rgba(251, 191, 36, 0.6)',
+    moveHighlight: 'rgba(251, 191, 36, 0.4)',
+    description: 'Soft sandy beige'
+  },
+  {
+    id: 'lava',
+    name: 'Lava Red',
+    lightSquare: '#ffebeb',
+    darkSquare: '#991b1b',
+    lightHover: '#ffe5e5',
+    darkHover: '#7f1d1d',
+    lightCoord: '#450a0a',
+    darkCoord: '#ffebeb',
+    borderColor: '#991b1b',
+    lastMoveHighlight: 'rgba(220, 38, 38, 0.5)',
+    moveHighlight: 'rgba(220, 38, 38, 0.3)',
+    description: 'Fiery red-black style'
   }
 ];
 
