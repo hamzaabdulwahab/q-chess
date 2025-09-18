@@ -224,8 +224,8 @@ body {
 
 /* Chess piece image styling */
 .chess-piece-image {
-  width: 97px;
-  height: 97px;
+  width: 105px;
+  height: 105px;
   object-fit: contain;
   image-rendering: auto;
 }
