@@ -273,7 +273,7 @@ function HomeContent() {
             </div>
           </div>
           <p className="text-accent text-xl font-medium">
-            Elite Chess • Strategic Mastery • Royal Excellence
+            Distraction-Free Chess
           </p>
           <div className="flex justify-center items-center mt-4 space-x-4">
             <div className="w-16 h-px bg-gradient-to-r from-transparent via-violet-400 to-transparent"></div>
@@ -290,11 +290,8 @@ function HomeContent() {
             onClick={() => setShowNewGameModal(true)}
             className="btn-accent text-black font-bold py-5 px-10 rounded-xl text-xl transition-all duration-300 transform hover:scale-105 shadow-2xl border border-accent/30"
           >
-            ♔ Start New Royal Match ♛
+            ♔ Start New Match ♛
           </button>
-          <p className="text-accent mt-3 font-medium tracking-wide">
-            Begin a strategic challenge worthy of royalty
-          </p>
         </div>
 
         {/* Error Message */}
