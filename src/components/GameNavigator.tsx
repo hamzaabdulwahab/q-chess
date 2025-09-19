@@ -73,7 +73,7 @@ export function GameNavigator({ onNewGame }: Props) {
       >
         <div className="p-4 pb-2 text-white flex items-center justify-between">
           <div className="text-sm uppercase tracking-wide text-gray-400">
-            Main Menu
+            Controls
           </div>
           <button
             onClick={() => setOpen(false)}
