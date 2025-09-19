@@ -10,6 +10,7 @@ import React, {
 import { useSearchParams } from "next/navigation";
 import { ChessBoard } from "@/components/ChessBoard";
 import { GameNavigator } from "@/components/GameNavigator";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 // no NewGameChoice needed
 // useRouter no longer needed after removing online redirect
 // MemeRotator and YouTubeMiniPlayer removed by request
@@ -846,11 +847,7 @@ function BoardContent() {
   }, [isOnline, flushQueuedMoves, flushOfflineQueueIfAny]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading game...</div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   // Do not block the board on non-fatal errors; show inline banners instead
@@ -952,13 +949,7 @@ function BoardContent() {
 
 export default function Board() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-          <div className="text-white text-xl">Loading...</div>
-        </div>
-      }
-    >
+    <Suspense fallback={<LoadingSpinner />}>
       <BoardContent />
     </Suspense>
   );

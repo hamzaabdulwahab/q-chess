@@ -10,6 +10,7 @@ import {
   type Category,
   type Winner,
 } from "@/components/ArchiveFilters";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 interface Game {
   id: number;
@@ -24,9 +25,7 @@ interface Game {
 
 export default function ArchivePage() {
   return (
-    <Suspense
-      fallback={<div className="text-center text-accent p-8">Loading...</div>}
-    >
+    <Suspense fallback={<LoadingSpinner />}>
       <ArchivePageContent />
     </Suspense>
   );
@@ -164,7 +163,7 @@ function ArchivePageContent() {
         </div>
 
         {loading ? (
-          <div className="text-center text-accent">Loading...</div>
+          <LoadingSpinner />
         ) : error ? (
           <div className="text-center text-red-400">{error}</div>
         ) : games.length === 0 ? (

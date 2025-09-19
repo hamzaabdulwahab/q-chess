@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { Alert } from "@/components/Alert";
 import { NewGameModal, type NewGameChoice } from "@/components/NewGameModal";
@@ -35,13 +36,7 @@ interface Game {
 
 export default function Home() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gray-900 flex items-center justify-center text-accent">
-          Loading...
-        </div>
-      }
-    >
+    <Suspense fallback={<LoadingSpinner />}>
       <HomeContent />
     </Suspense>
   );
@@ -261,11 +256,7 @@ function HomeContent() {
   }, [games, category, winner]);
 
   if (authed === null || loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
