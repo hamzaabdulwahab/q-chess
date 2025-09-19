@@ -17,7 +17,7 @@ export type ChessSoundType =
 class ChessSoundManager {
   private sounds: Map<ChessSoundType, HTMLAudioElement> = new Map();
   private enabled: boolean = true;
-  private volume: number = 0.5;
+  private volume: number = 1.0;
 
   constructor() {
     console.log("🎵 Initializing ChessSoundManager");
