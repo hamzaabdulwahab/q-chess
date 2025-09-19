@@ -142,7 +142,7 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    const gameId = await ChessService.createNewGame();
+    const gameId = await ChessService.createNewGame(user.id);
     
     // Invalidate cache after creating a new game
     const cacheKey = getCacheKey(user.id, 'games');
