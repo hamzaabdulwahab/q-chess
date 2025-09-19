@@ -61,7 +61,15 @@ export function ThemeSelector() {
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+        className="w-full text-white transition-colors flex items-center justify-center gap-2 hover:opacity-80"
+        style={{ 
+          backgroundColor: '#1B1B1B',
+          fontFamily: "'Inter', sans-serif",
+          fontWeight: 500,
+          fontSize: '16px',
+          padding: '0.6em 1.2em',
+          borderRadius: '8px'
+        }}
         title="Change board theme"
       >
         <Palette className="w-4 h-4" />

@@ -66,7 +66,15 @@ export const SoundControl: React.FC<SoundControlProps> = ({
     return (
       <button
         onClick={toggleSound}
-        className={`flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-medium ${className}`}
+        className={`flex items-center gap-2 text-white transition-colors hover:opacity-80 ${className}`}
+        style={{ 
+          backgroundColor: '#1B1B1B',
+          fontFamily: "'Inter', sans-serif",
+          fontWeight: 500,
+          fontSize: '16px',
+          padding: '0.6em 1.2em',
+          borderRadius: '8px'
+        }}
         title={isEnabled ? "Sound On" : "Sound Off"}
       >
         <span className="text-lg">{isEnabled ? "🔊" : "🔇"}</span>
