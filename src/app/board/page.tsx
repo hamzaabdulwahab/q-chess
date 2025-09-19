@@ -288,6 +288,14 @@ function BoardContent() {
             return;
           }
           
+          // Check if game not found - redirect to home to avoid confusion
+          if (response.status === 404) {
+            console.log("Game not found, redirecting to home");
+            alert("Game not found or you don't have access to this game.");
+            window.location.href = '/';
+            return;
+          }
+          
           console.warn(
             "Server load failed; keeping current view and will retry:",
             data.error,
@@ -438,6 +446,14 @@ function BoardContent() {
           if (response.status === 401) {
             console.log("Authentication required, redirecting to sign-in");
             window.location.href = `/auth/signin?redirectTo=/board${window.location.search}`;
+            return;
+          }
+          
+          // Check if game not found - redirect to home to avoid confusion
+          if (response.status === 404) {
+            console.log("Game not found, redirecting to home");
+            alert("Game not found or you don't have access to this game.");
+            window.location.href = '/';
             return;
           }
           
