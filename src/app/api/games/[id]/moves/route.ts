@@ -26,10 +26,24 @@ export async function GET(
       return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
     }
 
-    // Get current game state
-    const game = await ChessService.getGame(gameId);
+    // SECURITY: Get authenticated user first
+    const supabase = getSupabaseServer();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // SECURITY: Get current game state with user validation
+    const game = await ChessService.getGameForUser(gameId, user.id);
     if (!game) {
-      return NextResponse.json({ error: "Game not found" }, { status: 404 });
+      return NextResponse.json({ error: "Game not found or access denied" }, { status: 404 });
     }
 
     // Get query parameters
@@ -89,10 +103,10 @@ export async function POST(
 
     const { from, to, promotion } = await request.json();
 
-    // Get current game
-    const game = await ChessService.getGame(gameId);
+    // SECURITY: Get current game with user validation
+    const game = await ChessService.getGameForUser(gameId, user.id);
     if (!game) {
-      return NextResponse.json({ error: "Game not found" }, { status: 404 });
+      return NextResponse.json({ error: "Game not found or access denied" }, { status: 404 });
     }
 
     // Create chess service instance with current position

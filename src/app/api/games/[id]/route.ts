@@ -68,8 +68,22 @@ export async function GET(
       return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
     }
 
-    // Check cache first
-    const cacheKey = getGameCacheKey(gameId);
+    // SECURITY: Get authenticated user first
+    const supabase = getSupabaseServer();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Check cache first (user-specific cache)
+    const cacheKey = `${getGameCacheKey(gameId)}:${user.id}`;
     const cachedGame = getCachedGame(cacheKey);
     
     if (cachedGame) {
@@ -78,13 +92,14 @@ export async function GET(
       return response;
     }
 
-    const game = await ChessService.getGame(gameId);
+    // SECURITY: Use authenticated Supabase client to enforce RLS
+    const game = await ChessService.getGameForUser(gameId, user.id);
 
     if (!game) {
-      return NextResponse.json({ error: "Game not found" }, { status: 404 });
+      return NextResponse.json({ error: "Game not found or access denied" }, { status: 404 });
     }
 
-    // Cache the result
+    // Cache the result with user-specific key
     setCachedGame(cacheKey, game);
 
     const response = NextResponse.json({ game });
@@ -151,10 +166,10 @@ export async function POST(
       );
     }
 
-    // Get current game state
-    const game = await ChessService.getGame(gameId);
+    // SECURITY: Get current game state with user validation
+    const game = await ChessService.getGameForUser(gameId, user.id);
     if (!game) {
-      return NextResponse.json({ error: "Game not found" }, { status: 404 });
+      return NextResponse.json({ error: "Game not found or access denied" }, { status: 404 });
     }
 
     // Create chess service instance with current position

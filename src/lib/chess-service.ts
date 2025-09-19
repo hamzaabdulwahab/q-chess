@@ -59,7 +59,64 @@ export class ChessService {
     return data.id as number;
   }
 
-  // Get game by ID
+  // Get game by ID with user authentication (enforces RLS)
+  static async getGameForUser(
+    gameId: number,
+    userId: string
+  ): Promise<
+    | (Record<string, unknown> & {
+        moves: Record<string, unknown>[];
+        totalMoves: number;
+      })
+    | null
+  > {
+    // SECURITY: Use server client with user auth context to enforce RLS
+    const supabase = getSupabaseServer();
+    
+    // Single query to get game with moves using JOIN
+    // RLS policies will ensure the user can only access their own games
+    const { data: gameData, error: gameError } = await supabase
+      .from("games")
+      .select(`
+        *,
+        moves (
+          id,
+          move_number,
+          player,
+          move_notation,
+          fen_before,
+          fen_after,
+          pgn,
+          captured_piece,
+          is_check,
+          is_checkmate,
+          is_castling,
+          is_en_passant,
+          is_promotion,
+          created_at,
+          updated_at
+        )
+      `)
+      .eq("id", gameId)
+      .eq("user_id", userId) // Explicit user check for extra security
+      .single();
+
+    if (gameError || !gameData) {
+      return null;
+    }
+
+    // Sort moves by move_number to ensure correct order
+    const moves = (gameData.moves as any[]) || [];
+    moves.sort((a: any, b: any) => a.move_number - b.move_number);
+
+    return {
+      ...gameData,
+      moves: moves as Record<string, unknown>[],
+      totalMoves: moves.length,
+    };
+  }
+
+  // Get game by ID (DEPRECATED - use getGameForUser instead for security)
   static async getGame(
     gameId: number
   ): Promise<
