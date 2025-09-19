@@ -19,15 +19,24 @@ function assessPassword(pw: string) {
   const digit = /\d/.test(pw);
   const special = /[^A-Za-z0-9]/.test(pw);
   const passed = [length, lower, upper, digit, special].filter(Boolean).length;
+  
+  // Check for common weak passwords
+  const commonWeak = [
+    'password', 'password123', '123456789', 'qwerty123',
+    'admin123', 'letmein123', 'welcome123', 'password1',
+    'abc123456', '123456abc', 'passw0rd', 'p@ssw0rd'
+  ];
+  const isCommonWeak = commonWeak.includes(pw.toLowerCase());
+  
   const strength: Strength =
-    passed <= 2
+    isCommonWeak || passed <= 2
       ? "weak"
       : passed === 3
       ? "fair"
       : passed === 4
       ? "good"
       : "strong";
-  return { length, lower, upper, digit, special, passed, strength };
+  return { length, lower, upper, digit, special, passed, strength, isCommonWeak };
 }
 
 function classForStrength(s: Strength) {
@@ -104,9 +113,30 @@ export default function SignUp() {
       setError("Password must be 8+ chars with upper, lower, and a number.");
       return;
     }
+    if (check.isCommonWeak) {
+      setError("This password is too common. Please choose a more unique password.");
+      return;
+    }
     setLoading(true);
     try {
       const supabase = getSupabaseBrowser();
+      
+      // Enhanced password validation using database function
+      const { data: validation, error: validationError } = await supabase
+        .rpc('validate_user_signup', {
+          email: emailClean,
+          password: password
+        });
+      
+      if (validationError) {
+        console.warn('Password validation failed:', validationError);
+        // Continue with basic validation if database function fails
+      } else if (validation && !validation.valid) {
+        setError(validation.errors.join(' '));
+        setLoading(false);
+        return;
+      }
+      
       // Check username availability in profiles
       const { data: existing, error: selErr } = await supabase
         .from("profiles")
@@ -267,25 +297,6 @@ export default function SignUp() {
                 )} transition-all`}
               ></div>
             </div>
-            <ul className="text-xs text-gray-300 mt-2 space-y-1">
-              <li className={check.length ? "text-green-400" : "text-gray-400"}>
-                8+ characters
-              </li>
-              <li className={check.lower ? "text-green-400" : "text-gray-400"}>
-                lowercase letter
-              </li>
-              <li className={check.upper ? "text-green-400" : "text-gray-400"}>
-                uppercase letter
-              </li>
-              <li className={check.digit ? "text-green-400" : "text-gray-400"}>
-                number
-              </li>
-              <li
-                className={check.special ? "text-green-400" : "text-gray-400"}
-              >
-                special character
-              </li>
-            </ul>
           </div>
 
           <div>

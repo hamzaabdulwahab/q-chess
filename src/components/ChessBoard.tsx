@@ -683,7 +683,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       const toRank = parseInt(to.charAt(1));
       const isWhitePawn = piece.charAt(0) === "w";
 
-      return (isWhitePawn && toRank === 8) || (!isWhitePawn && toRank === 1);
+      // Check if pawn reaches promotion rank
+      const reachesPromotionRank = (isWhitePawn && toRank === 8) || (!isWhitePawn && toRank === 1);
+      
+      if (!reachesPromotionRank) return false;
+      
+      // Verify this is actually a legal move (including captures)
+      // We need to check with queen promotion as default to validate the move is legal
+      return chessService.isMoveLegal(from, to, "q");
     },
     [chessService],
   );
@@ -714,28 +721,29 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           // Deselect the same square
           setSelectedSquare(null);
         } else {
-          // Try to make a move from selectedSquare to square
-          const isLegalMove = chessService.isMoveLegal(selectedSquare, square);
-          
-          if (isLegalMove) {
+          // Check if this is a promotion move first
+          if (isPromotionMove(selectedSquare, square)) {
             // Clear selection immediately for responsive UI
             setSelectedSquare(null);
+            setPendingMove({ from: selectedSquare, to: square });
+            setShowPromotionModal(true);
+          } else {
+            // Try to make a regular move
+            const isLegalMove = chessService.isMoveLegal(selectedSquare, square);
             
-            // Check if this is a promotion move
-            if (isPromotionMove(selectedSquare, square)) {
-              setPendingMove({ from: selectedSquare, to: square });
-              setShowPromotionModal(true);
-            } else {
+            if (isLegalMove) {
+              // Clear selection immediately for responsive UI
+              setSelectedSquare(null);
               // Make a regular move (including en passant and castling)
               await makeMove(selectedSquare, square);
+            } else if (piece && piece[0] === gameState.turn.charAt(0)) {
+              // Select a new piece of the same color
+              setSelectedSquare(square);
+            } else {
+              // Invalid move, play illegal move sound and deselect
+              soundManager.play("illegal-move");
+              setSelectedSquare(null);
             }
-          } else if (piece && piece[0] === gameState.turn.charAt(0)) {
-            // Select a new piece of the same color
-            setSelectedSquare(square);
-          } else {
-            // Invalid move, play illegal move sound and deselect
-            soundManager.play("illegal-move");
-            setSelectedSquare(null);
           }
         }
       } else if (piece && piece[0] === gameState.turn.charAt(0)) {

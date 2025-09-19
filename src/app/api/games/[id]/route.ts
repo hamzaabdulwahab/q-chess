@@ -2,6 +2,48 @@ import { NextRequest, NextResponse } from "next/server";
 import { ChessService } from "@/lib/chess-service";
 import { getSupabaseServer } from "@/lib/supabase-server";
 
+// Simple in-memory cache for individual games
+interface GameCacheEntry {
+  data: unknown;
+  timestamp: number;
+}
+
+const gameCache = new Map<string, GameCacheEntry>();
+const CACHE_TTL = 15 * 1000; // 15 seconds cache for individual games
+
+function getGameCacheKey(gameId: number) {
+  return `game:${gameId}`;
+}
+
+function getCachedGame(cacheKey: string): unknown | null {
+  const entry = gameCache.get(cacheKey);
+  if (!entry) return null;
+  
+  if (Date.now() - entry.timestamp > CACHE_TTL) {
+    gameCache.delete(cacheKey);
+    return null;
+  }
+  
+  return entry.data;
+}
+
+function setCachedGame(cacheKey: string, data: unknown) {
+  gameCache.set(cacheKey, {
+    data,
+    timestamp: Date.now()
+  });
+  
+  // Cleanup old entries periodically
+  if (gameCache.size > 500) {
+    const now = Date.now();
+    for (const [key, entry] of gameCache.entries()) {
+      if (now - entry.timestamp > CACHE_TTL) {
+        gameCache.delete(key);
+      }
+    }
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,13 +68,29 @@ export async function GET(
       return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
     }
 
+    // Check cache first
+    const cacheKey = getGameCacheKey(gameId);
+    const cachedGame = getCachedGame(cacheKey);
+    
+    if (cachedGame) {
+      const response = NextResponse.json({ game: cachedGame });
+      response.headers.set('X-Cache', 'HIT');
+      return response;
+    }
+
     const game = await ChessService.getGame(gameId);
 
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ game });
+    // Cache the result
+    setCachedGame(cacheKey, game);
+
+    const response = NextResponse.json({ game });
+    response.headers.set('X-Cache', 'MISS');
+    response.headers.set('Cache-Control', 'private, max-age=15');
+    return response;
   } catch (error) {
     console.error("Error fetching game:", error);
     return NextResponse.json(
@@ -130,6 +188,10 @@ export async function POST(
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
+
+    // Invalidate cache after making a move
+    const cacheKey = getGameCacheKey(gameId);
+    gameCache.delete(cacheKey);
 
     return NextResponse.json({
       ...result,

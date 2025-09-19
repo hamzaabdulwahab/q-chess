@@ -21,6 +21,14 @@ export function getSupabaseServer() {
           store.set({ name, value: "", ...options });
         },
       },
+      db: {
+        schema: 'public',
+      },
+      auth: {
+        // Optimize auth settings for performance
+        autoRefreshToken: true,
+        persistSession: true,
+      },
     }
   );
 }

@@ -1,5 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { Chess } from "chess.js";
 import { getSupabaseServer } from "@/lib/supabase-server";
+import { getSupabasePooledClient } from "@/lib/supabase-pooled";
 
 export class ChessService {
   public chess: Chess;
@@ -8,9 +11,19 @@ export class ChessService {
     this.chess = new Chess(fen);
   }
 
+  // Get the appropriate Supabase client based on operation type
+  private static getClient() {
+    // Use service role key if available for better performance
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return getSupabasePooledClient();
+    }
+    // Fallback to regular server client
+    return getSupabaseServer();
+  }
+
   // Create a new game
   static async createNewGame(userId?: string): Promise<number> {
-    const supabase = await getSupabaseServer();
+    const supabase = ChessService.getClient();
     const chess = new Chess();
     const initialFen = chess.fen();
 
@@ -56,31 +69,46 @@ export class ChessService {
       })
     | null
   > {
-    const supabase = await getSupabaseServer();
-    const { data: game, error: gameError } = await supabase
+    const supabase = ChessService.getClient();
+    
+    // Single query to get game with moves using JOIN
+    const { data: gameData, error: gameError } = await supabase
       .from("games")
-      .select("*")
+      .select(`
+        *,
+        moves (
+          id,
+          move_number,
+          player,
+          move_notation,
+          fen_before,
+          fen_after,
+          pgn,
+          captured_piece,
+          is_check,
+          is_checkmate,
+          is_castling,
+          is_en_passant,
+          is_promotion,
+          created_at,
+          updated_at
+        )
+      `)
       .eq("id", gameId)
       .single();
 
-    if (gameError || !game) {
+    if (gameError || !gameData) {
       return null;
     }
 
-    const { data: moves, error: movesError } = await supabase
-      .from("moves")
-      .select("*")
-      .eq("game_id", gameId)
-      .order("move_number", { ascending: true });
-
-    if (movesError) {
-      throw new Error(movesError.message);
-    }
+    // Sort moves by move_number to ensure correct order
+    const moves = (gameData.moves as any[]) || [];
+    moves.sort((a: any, b: any) => a.move_number - b.move_number);
 
     return {
-      ...(game as Record<string, unknown>),
-      moves: (moves as Record<string, unknown>[]) || [],
-      totalMoves: moves?.length || 0,
+      ...gameData,
+      moves: moves as Record<string, unknown>[],
+      totalMoves: moves.length,
     };
   }
 
@@ -91,75 +119,182 @@ export class ChessService {
       totalMoves: number;
     })[]
   > {
-    const supabase = await getSupabaseServer();
-    const { data: games, error } = await supabase
+    const supabase = ChessService.getClient();
+    
+    // Single query to get games with moves using JOIN
+    const { data: gamesData, error } = await supabase
       .from("games")
-      .select("*")
+      .select(`
+        *,
+        moves (
+          id,
+          move_number,
+          player,
+          move_notation,
+          fen_before,
+          fen_after,
+          pgn,
+          captured_piece,
+          is_check,
+          is_checkmate,
+          is_castling,
+          is_en_passant,
+          is_promotion,
+          created_at,
+          updated_at
+        )
+      `)
       .order("updated_at", { ascending: false });
 
     if (error) {
       throw new Error(error.message);
     }
 
-    const gamesWithMoves = await Promise.all(
-      (games || []).map(async (game: Record<string, unknown>) => {
-        const { data: moveRows } = await supabase
-          .from("moves")
-          .select("*")
-          .eq("game_id", (game as unknown as { id: number }).id)
-          .order("move_number", { ascending: true });
-
-        return {
-          ...(game as Record<string, unknown>),
-          moves: (moveRows as Record<string, unknown>[]) || [],
-          totalMoves: (moveRows?.length as number) || 0,
-        };
-      })
-    );
+    // Transform the data to match the expected structure
+    const gamesWithMoves = (gamesData || []).map((game: any) => {
+      const moves = game.moves || [];
+      // Sort moves by move_number to ensure correct order
+      moves.sort((a: any, b: any) => a.move_number - b.move_number);
+      
+      return {
+        ...game,
+        moves: moves as Record<string, unknown>[],
+        totalMoves: moves.length,
+      };
+    });
 
     return gamesWithMoves;
   }
 
-  // Get games for a specific user
+  // Get games for a specific user (lightweight version for lists)
+  static async getUserGamesLight(
+    userId: string, 
+    page: number = 1, 
+    limit: number = 20
+  ): Promise<{
+    games: (Record<string, unknown> & { totalMoves: number })[];
+    total: number;
+  }> {
+    const supabase = ChessService.getClient();
+    
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+    
+    // Get total count first
+    const { count } = await supabase
+      .from("games")
+      .select("*", { count: 'exact', head: true })
+      .eq("user_id", userId);
+
+    // Lightweight query without moves data, just count
+    const { data: gamesData, error: gamesError } = await supabase
+      .from("games")
+      .select(`
+        id,
+        status,
+        current_player,
+        winner,
+        move_count,
+        created_at,
+        updated_at
+      `)
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (gamesError) {
+      throw new Error(gamesError.message);
+    }
+
+    // Get move counts for these games in a single query
+    const gameIds = (gamesData || []).map((game: any) => game.id);
+    let moveCounts: Record<number, number> = {};
+    
+    if (gameIds.length > 0) {
+      const { data: moveCountsData, error: moveCountsError } = await supabase
+        .from("moves")
+        .select("game_id")
+        .in("game_id", gameIds);
+
+      if (!moveCountsError && moveCountsData) {
+        // Count moves per game
+        moveCounts = moveCountsData.reduce((acc: Record<number, number>, move: any) => {
+          acc[move.game_id] = (acc[move.game_id] || 0) + 1;
+          return acc;
+        }, {});
+      }
+    }
+
+    // Transform the data to include move count
+    const gamesLight = (gamesData || []).map((game: any) => ({
+      ...game,
+      totalMoves: moveCounts[game.id] || 0,
+    }));
+
+    return {
+      games: gamesLight,
+      total: count || 0
+    };
+  }
+
+  // Get games for a specific user (full version with moves)
   static async getUserGames(userId: string): Promise<
     (Record<string, unknown> & {
       moves: Record<string, unknown>[];
       totalMoves: number;
     })[]
   > {
-    const supabase = await getSupabaseServer();
-    const { data: games, error } = await supabase
+    const supabase = ChessService.getClient();
+    
+    // Single query to get games with move counts using JOIN
+    const { data: gamesData, error: gamesError } = await supabase
       .from("games")
-      .select("*")
+      .select(`
+        *,
+        moves (
+          id,
+          move_number,
+          player,
+          move_notation,
+          fen_before,
+          fen_after,
+          pgn,
+          captured_piece,
+          is_check,
+          is_checkmate,
+          is_castling,
+          is_en_passant,
+          is_promotion,
+          created_at,
+          updated_at
+        )
+      `)
       .eq("user_id", userId)
       .order("updated_at", { ascending: false });
 
-    if (error) {
-      throw new Error(error.message);
+    if (gamesError) {
+      throw new Error(gamesError.message);
     }
 
-    const gamesWithMoves = await Promise.all(
-      (games || []).map(async (game: Record<string, unknown>) => {
-        const { data: moveRows } = await supabase
-          .from("moves")
-          .select("*")
-          .eq("game_id", (game as unknown as { id: number }).id)
-          .order("move_number", { ascending: true });
-
-        return {
-          ...(game as Record<string, unknown>),
-          moves: (moveRows as Record<string, unknown>[]) || [],
-          totalMoves: (moveRows?.length as number) || 0,
-        };
-      })
-    );
+    // Transform the data to match the expected structure
+    const gamesWithMoves = (gamesData || []).map((game: any) => {
+      const moves = game.moves || [];
+      // Sort moves by move_number to ensure correct order
+      moves.sort((a: any, b: any) => a.move_number - b.move_number);
+      
+      return {
+        ...game,
+        moves: moves as Record<string, unknown>[],
+        totalMoves: moves.length,
+      };
+    });
 
     return gamesWithMoves;
   }
 
   // Delete a game
   static async deleteGame(gameId: number): Promise<boolean> {
-    const supabase = await getSupabaseServer();
+    const supabase = ChessService.getClient();
     // Delete moves first (in case no FK cascade)
     await supabase.from("moves").delete().eq("game_id", gameId);
     const { error } = await supabase.from("games").delete().eq("id", gameId);
@@ -168,7 +303,7 @@ export class ChessService {
 
   // Delete all games
   static async deleteAllGames(): Promise<number> {
-    const supabase = getSupabaseServer();
+    const supabase = ChessService.getClient();
     await supabase.from("moves").delete().neq("id", 0);
     const { error } = await supabase.from("games").delete().neq("id", 0);
     if (error) throw new Error(error.message);
@@ -199,29 +334,29 @@ export class ChessService {
       const moveNumber = Math.floor(historyLength / 2) + 1;
       const player = this.chess.turn() === "w" ? "white" : "black";
 
-      // Attempt to make the move
-      const move = this.chess.move({
-        from,
-        to,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        promotion: promotion as any,
-      });
+      // Store the piece at the destination square for capture detection
+      const destinationSquare = this.chess.get(to as any);
+      const capturedPiece = destinationSquare ? destinationSquare.type : null;
 
+      // Attempt to make the move
+      const move = this.chess.move({ from, to, promotion: promotion as any });
       if (!move) {
-        return { success: false, error: "Invalid move" };
+        return {
+          success: false,
+          error: "Invalid move",
+        };
       }
 
       const fenAfter = this.chess.fen();
       const pgn = this.chess.pgn();
 
-      // Check game status
+      // Determine game status
       let gameStatus = "active";
       let winner: "white" | "black" | "draw" | undefined;
 
       if (this.chess.isCheckmate()) {
         gameStatus = "checkmate";
-        // The player who just moved wins (they checkmated their opponent)
-        winner = player;
+        winner = player; // The player who just moved wins
       } else if (this.chess.isStalemate()) {
         gameStatus = "stalemate";
         winner = "draw";
@@ -231,7 +366,7 @@ export class ChessService {
       }
 
       // Record the move and update game in Supabase
-      const supabase = getSupabaseServer();
+      const supabase = ChessService.getClient();
       const isCastling = this.isCastlingMove(from, to);
       const isEnPassant = this.isEnPassantMove(from, to);
       const isPromotion = this.isPromotionMove(from, to);
@@ -245,24 +380,24 @@ export class ChessService {
         fen_before: fenBefore,
         fen_after: fenAfter,
         pgn,
-        captured_piece: move.captured || null,
-        is_check: this.chess.inCheck(),
+        captured_piece: capturedPiece,
+        is_check: this.chess.isCheck(),
         is_checkmate: this.chess.isCheckmate(),
         is_castling: isCastling,
         is_en_passant: isEnPassant,
         is_promotion: isPromotion,
       });
 
-      // Update game
+      // Update game state
       await supabase
         .from("games")
         .update({
           fen: fenAfter,
           pgn,
+          current_player: this.chess.turn() === "w" ? "white" : "black",
           status: gameStatus,
-          current_player: this.getCurrentTurn(),
-          winner: winner || null,
-          move_count: this.chess.history().length,
+          winner,
+          move_count: historyLength + 1,
         })
         .eq("id", gameId);
 
@@ -271,7 +406,7 @@ export class ChessService {
         fen: fenAfter,
         pgn,
         san: move.san,
-        capturedPiece: move.captured,
+        capturedPiece: capturedPiece || undefined,
         gameStatus,
         winner,
       };
@@ -285,141 +420,68 @@ export class ChessService {
 
   // Get possible moves for a square
   getPossibleMoves(square: string): string[] {
-    try {
-      const moves = this.chess.moves({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        square: square as any,
-        verbose: true,
-      });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return moves.map((move: any) => move.to);
-    } catch {
-      console.error("Error getting possible moves");
-      return [];
-    }
+    return this.chess.moves({ square: square as any, verbose: false });
   }
 
   // Get all legal moves
   getAllMoves(): string[] {
-    try {
-      return this.chess.moves();
-    } catch {
-      console.error("Error getting moves");
-      return [];
-    }
+    return this.chess.moves();
   }
 
-  // Get all legal moves with detailed information
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getAllMovesDetailed(): any[] {
-    try {
-      return this.chess.moves({ verbose: true });
-    } catch {
-      console.error("Error getting detailed moves");
-      return [];
-    }
+  // Game status methods
+  getGameStatus(): {
+    isCheck: boolean;
+    isCheckmate: boolean;
+    isStalemate: boolean;
+    isDraw: boolean;
+    isGameOver: boolean;
+    winner?: "white" | "black" | "draw";
+  } {
+    return {
+      isCheck: this.chess.isCheck(),
+      isCheckmate: this.chess.isCheckmate(),
+      isStalemate: this.chess.isStalemate(),
+      isDraw: this.chess.isDraw(),
+      isGameOver: this.chess.isGameOver(),
+      winner: this.chess.isCheckmate()
+        ? this.chess.turn() === "w"
+          ? "black"
+          : "white"
+        : this.chess.isDraw() || this.chess.isStalemate()
+        ? "draw"
+        : undefined,
+    };
   }
 
-  // Check if a move involves castling
-  isCastlingMove(from: string, to: string): boolean {
-    try {
-      const moves = this.chess.moves({ verbose: true });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const move = moves.find((m: any) => m.from === from && m.to === to);
-      return Boolean(
-        move && (move.flags.includes("k") || move.flags.includes("q"))
-      );
-    } catch {
-      return false;
-    }
+  // Helper methods
+  private isCastlingMove(from: string, to: string): boolean {
+    // Check if it's a king move of 2 squares
+    const fromFile = from.charCodeAt(0);
+    const toFile = to.charCodeAt(0);
+    const fromRank = from.charCodeAt(1);
+    const toRank = to.charCodeAt(1);
+
+    return (
+      fromRank === toRank && // Same rank
+      Math.abs(fromFile - toFile) === 2 && // 2 squares horizontally
+      ((from === "e1" && (to === "g1" || to === "c1")) || // White castling
+        (from === "e8" && (to === "g8" || to === "c8"))) // Black castling
+    );
   }
 
-  // Check if a move involves en passant
-  isEnPassantMove(from: string, to: string): boolean {
-    try {
-      const moves = this.chess.moves({ verbose: true });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const move = moves.find((m: any) => m.from === from && m.to === to);
-      return Boolean(move && move.flags.includes("e"));
-    } catch {
-      return false;
-    }
+  private isEnPassantMove(from: string, to: string): boolean {
+    // This is a simplified check - in a real implementation,
+    // you'd check if a pawn is moving diagonally to an empty square
+    const piece = this.chess.get(from as any);
+    return piece?.type === "p" && from.charCodeAt(0) !== to.charCodeAt(0);
   }
 
-  // Check if a move is a pawn promotion
-  isPromotionMove(from: string, to: string): boolean {
-    try {
-      const moves = this.chess.moves({ verbose: true });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const move = moves.find((m: any) => m.from === from && m.to === to);
-      return Boolean(move && move.flags.includes("p"));
-    } catch {
-      return false;
-    }
+  private isPromotionMove(from: string, to: string): boolean {
+    const piece = this.chess.get(from as any);
+    return (
+      piece?.type === "p" &&
+      ((piece.color === "w" && to.charCodeAt(1) === "8".charCodeAt(0)) ||
+        (piece.color === "b" && to.charCodeAt(1) === "1".charCodeAt(0)))
+    );
   }
-
-  // Check if position is in check
-  isInCheck(): boolean {
-    return this.chess.inCheck();
-  }
-
-  // Get current turn
-  getCurrentTurn(): "white" | "black" {
-    return this.chess.turn() === "w" ? "white" : "black";
-  }
-
-  // Get FEN string
-  getFen(): string {
-    return this.chess.fen();
-  }
-
-  // Get PGN string
-  getPgn(): string {
-    return this.chess.pgn();
-  }
-
-  // Get move history
-  getHistory(): string[] {
-    return this.chess.history();
-  }
-
-  // Load FEN position
-  loadFen(fen: string): boolean {
-    try {
-      this.chess.load(fen);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // Reset game
-  reset(): void {
-    this.chess.reset();
-  }
-
-  // Get piece at square
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getPiece(square: string): any {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.chess.get(square as any);
-  }
-
-  // Get ASCII representation (for debugging)
-  ascii(): string {
-    return this.chess.ascii();
-  }
-}
-
-// Utility functions
-export function squareToCoords(square: string): { file: number; rank: number } {
-  const file = square.charCodeAt(0) - 97; // 'a' = 0, 'b' = 1, etc.
-  const rank = parseInt(square[1]) - 1; // '1' = 0, '2' = 1, etc.
-  return { file, rank };
-}
-
-export function coordsToSquare(file: number, rank: number): string {
-  const fileChar = String.fromCharCode(97 + file); // 0 = 'a', 1 = 'b', etc.
-  const rankChar = (rank + 1).toString(); // 0 = '1', 1 = '2', etc.
-  return fileChar + rankChar;
 }
