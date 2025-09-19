@@ -10,10 +10,8 @@ import React, {
 import { useSearchParams } from "next/navigation";
 import { ChessBoard } from "@/components/ChessBoard";
 import { GameNavigator } from "@/components/GameNavigator";
-import { PlayerBadge } from "@/components/PlayerBadge";
 // no NewGameChoice needed
 // useRouter no longer needed after removing online redirect
-import { Ticker } from "@/components/Ticker";
 // MemeRotator and YouTubeMiniPlayer removed by request
 import { ChessClient } from "@/lib/chess-client";
 
@@ -45,8 +43,6 @@ function BoardContent() {
   const gameId = searchParams.get("id");
   const mode = searchParams.get("mode"); // "remote" or null
   const youColorParam = searchParams.get("you") as "white" | "black" | null;
-  const whiteNameParam = searchParams.get("white");
-  const blackNameParam = searchParams.get("black");
   // router removed
 
   const [loading, setLoading] = useState(true);
@@ -57,10 +53,6 @@ function BoardContent() {
     gameStatus: "active",
     moveHistory: [] as string[],
     capturedPieces: { white: [] as string[], black: [] as string[] },
-  });
-  const [playerNames] = useState<{ white?: string; black?: string }>({
-    white: whiteNameParam || undefined,
-    black: blackNameParam || undefined,
   });
 
   // Timers removed
@@ -435,15 +427,6 @@ function BoardContent() {
   // Board orientation: side to move always at bottom unless remote mode locks user color
   const boardOrientation: "white" | "black" =
     mode === "remote" && youColorParam ? youColorParam : fenTurn;
-
-  // Badges: bottom shows the color at bottom (boardOrientation), active border shows side to move (fenTurn)
-  // Badge assignment: bottom badge always reflects side currently at bottom (boardOrientation),
-  // labels (name/username) swap purely by orientation, NOT by whose turn it is.
-  const bottomBadgeColor: "white" | "black" = boardOrientation;
-  const topBadgeColor: "white" | "black" = bottomBadgeColor === "white" ? "black" : "white";
-  // Active highlighting strictly follows side-to-move (fenTurn)
-  const isBottomActive = fenTurn === bottomBadgeColor && gameState.gameStatus === "active";
-  const isTopActive = fenTurn === topBadgeColor && gameState.gameStatus === "active";
 
   // Timers removed: no ticking, storage, or timeout logic
 
@@ -905,24 +888,10 @@ function BoardContent() {
           }}
         />
       </div>
-      <div className="flex-1 flex items-start justify-center px-4 overflow-hidden">
+      <div className="flex-1 flex items-center justify-center px-4 overflow-hidden">
         {/* Chess Board centered with tiles connected to board edges */}
         <div className="flex justify-center flex-1 min-w-0">
           <div className="flex flex-col items-stretch gap-2 w-full max-w-[960px]">
-            {/* Top badge: always the opposite of bottom orientation */}
-            <div className="flex justify-start">
-              <PlayerBadge
-                name={
-                  playerNames[topBadgeColor] ||
-                  (topBadgeColor === "white" ? "White" : "Black")
-                }
-                username={topBadgeColor === "white" ? "white" : "black"}
-                active={isTopActive}
-                align="top-left"
-                color={topBadgeColor}
-                absolute={false}
-              />
-            </div>
             {/* Vs Computer UI removed */}
 
             <ChessBoard
@@ -933,20 +902,6 @@ function BoardContent() {
               orientation={boardOrientation}
               turn={fenTurn}
             />
-            <div className="flex justify-end items-center gap-3">
-              {/* Vs Computer indicators removed */}
-              <PlayerBadge
-                name={
-                  playerNames[bottomBadgeColor] ||
-                  (bottomBadgeColor === "white" ? "White" : "Black")
-                }
-                username={bottomBadgeColor === "white" ? "white" : "black"}
-                active={isBottomActive}
-                align="bottom-right"
-                color={bottomBadgeColor}
-                absolute={false}
-              />
-            </div>
             {gameOver && (
               <div className="text-accent mt-3 text-center">
                 {gameOver.reason}
@@ -956,7 +911,6 @@ function BoardContent() {
         </div>
         {/* Right-side memes section removed */}
       </div>
-  <Ticker speed={150} />
     </div>
   );
 }
