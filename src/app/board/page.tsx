@@ -288,11 +288,23 @@ function BoardContent() {
             return;
           }
           
-          // Check if game not found - redirect to home to avoid confusion
+          // Check if game not found - show professional error instead of alert
           if (response.status === 404) {
-            console.log("Game not found, redirecting to home");
-            alert("Game not found or you don't have access to this game.");
-            window.location.href = '/';
+            console.log("Game not found, showing user-friendly message");
+            
+            // Professional UX: Show a proper notification instead of alert
+            const shouldCreateNew = confirm(
+              "This game is private or doesn't exist.\n\n" +
+              "Would you like to create a new game instead?\n\n" +
+              "• Click OK to start a new game\n" +
+              "• Click Cancel to return home"
+            );
+            
+            if (shouldCreateNew) {
+              await createNewGame();
+            } else {
+              window.location.href = '/';
+            }
             return;
           }
           
@@ -449,11 +461,23 @@ function BoardContent() {
             return;
           }
           
-          // Check if game not found - redirect to home to avoid confusion
+          // Check if game not found - show professional error instead of alert
           if (response.status === 404) {
-            console.log("Game not found, redirecting to home");
-            alert("Game not found or you don't have access to this game.");
-            window.location.href = '/';
+            console.log("Game not found, showing user-friendly message");
+            
+            // Professional UX: Show a proper notification instead of alert
+            const shouldCreateNew = confirm(
+              "This game is private or doesn't exist.\n\n" +
+              "Would you like to create a new game instead?\n\n" +
+              "• Click OK to start a new game\n" +
+              "• Click Cancel to return home"
+            );
+            
+            if (shouldCreateNew) {
+              await createNewGame();
+            } else {
+              window.location.href = '/';
+            }
             return;
           }
           
