@@ -55,6 +55,9 @@ function BoardContent() {
     capturedPieces: { white: [] as string[], black: [] as string[] },
   });
 
+  // State to track if cursor is over the chess board (for hiding navigator)
+  const [isBoardHovered, setIsBoardHovered] = useState(false);
+
   // Timers removed
   const [gameOver, setGameOver] = useState<null | {
     winner: "white" | "black";
@@ -879,19 +882,25 @@ function BoardContent() {
             </span>
           )}
         </div>
-        {/* Slide-out navigator */}
-        <GameNavigator
-          onNewGame={(choice) => {
-            if (choice === "local-2v2") {
-              resetGame();
-            }
-          }}
-        />
+        {/* Slide-out navigator - hidden when cursor is over the chess board */}
+        {!isBoardHovered && (
+          <GameNavigator
+            onNewGame={(choice) => {
+              if (choice === "local-2v2") {
+                resetGame();
+              }
+            }}
+          />
+        )}
       </div>
       <div className="flex-1 flex items-center justify-center px-4 overflow-hidden">
         {/* Chess Board centered with tiles connected to board edges */}
         <div className="flex justify-center flex-1 min-w-0">
-          <div className="flex flex-col items-stretch gap-2 w-full max-w-[960px]">
+          <div 
+            className="flex flex-col items-stretch gap-2 w-full max-w-[960px]"
+            onMouseEnter={() => setIsBoardHovered(true)}
+            onMouseLeave={() => setIsBoardHovered(false)}
+          >
             {/* Vs Computer UI removed */}
 
             <ChessBoard
