@@ -58,6 +58,33 @@ function BoardContent() {
   // State to track if cursor is over the chess board (for hiding navigator)
   const [isBoardHovered, setIsBoardHovered] = useState(false);
 
+  // Effect to handle chess board hover detection
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // Find chess board elements by their CSS classes
+      const boardElement = document.querySelector('.chess-board-large');
+      const boardOrientElement = document.querySelector('.board-orient');
+      
+      if (boardElement && boardOrientElement) {
+        const rect = boardOrientElement.getBoundingClientRect();
+        const isOverBoard = (
+          e.clientX >= rect.left &&
+          e.clientX <= rect.right &&
+          e.clientY >= rect.top &&
+          e.clientY <= rect.bottom
+        );
+        setIsBoardHovered(isOverBoard);
+      }
+    };
+
+    // Add event listener to document to track mouse position globally
+    document.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
   // Timers removed
   const [gameOver, setGameOver] = useState<null | {
     winner: "white" | "black";
@@ -829,7 +856,8 @@ function BoardContent() {
   // Do not block the board on non-fatal errors; show inline banners instead
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col pb-12 overflow-x-hidden">
+    <>
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col pb-12 overflow-x-hidden">
       <div className="container mx-auto px-4 py-4 flex-0">
         {/* Online/Offline + Queue status */}
         <div className="mb-2 flex items-center gap-3 text-sm text-gray-300 hidden">
@@ -882,25 +910,11 @@ function BoardContent() {
             </span>
           )}
         </div>
-        {/* Slide-out navigator - hidden when cursor is over the chess board */}
-        {!isBoardHovered && (
-          <GameNavigator
-            onNewGame={(choice) => {
-              if (choice === "local-2v2") {
-                resetGame();
-              }
-            }}
-          />
-        )}
       </div>
       <div className="flex-1 flex items-center justify-center px-4 overflow-hidden">
         {/* Chess Board centered with tiles connected to board edges */}
         <div className="flex justify-center flex-1 min-w-0">
-          <div 
-            className="flex flex-col items-stretch gap-2 w-full max-w-[960px]"
-            onMouseEnter={() => setIsBoardHovered(true)}
-            onMouseLeave={() => setIsBoardHovered(false)}
-          >
+          <div className="flex flex-col items-stretch gap-2 w-full h-full">
             {/* Vs Computer UI removed */}
 
             <ChessBoard
@@ -920,7 +934,19 @@ function BoardContent() {
         </div>
         {/* Right-side memes section removed */}
       </div>
-    </div>
+      </div>
+      
+      {/* Slide-out navigator - hidden when cursor is over the chess board */}
+      {!isBoardHovered && (
+        <GameNavigator
+          onNewGame={(choice) => {
+            if (choice === "local-2v2") {
+              resetGame();
+            }
+          }}
+        />
+      )}
+    </>
   );
 }
 
