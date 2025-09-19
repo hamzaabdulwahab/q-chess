@@ -311,7 +311,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     new ChessClient(fen),
   );
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
-  const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
   const [gameState, setGameState] = useState({
     fen,
     turn: "white" as "white" | "black",
@@ -696,14 +695,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       setPendingMove(null);
     }
     setSelectedSquare(null);
-    setPossibleMoves([]);
   };
 
   const handlePromotionCancel = () => {
     setShowPromotionModal(false);
     setPendingMove(null);
     setSelectedSquare(null);
-    setPossibleMoves([]);
   };
 
   const handleSquareClick = useCallback(
@@ -716,47 +713,38 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         if (selectedSquare === square) {
           // Deselect the same square
           setSelectedSquare(null);
-          setPossibleMoves([]);
-        } else if (possibleMoves.includes(square)) {
-          // Clear selection immediately for responsive UI
-          setSelectedSquare(null);
-          setPossibleMoves([]);
-          
-          // Check if this is a promotion move
-          if (isPromotionMove(selectedSquare, square)) {
-            setPendingMove({ from: selectedSquare, to: square });
-            setShowPromotionModal(true);
-          } else {
-            // Make a regular move (including en passant and castling)
-            await makeMove(selectedSquare, square);
-          }
-        } else if (piece && piece[0] === gameState.turn.charAt(0)) {
-          // Select a new piece of the same color
-          setSelectedSquare(square);
-          setPossibleMoves(chessService.getPossibleMoves(square));
         } else {
-          // Deselect if clicking on opponent's piece or empty square
-          // Only play illegal move sound if trying to move to an invalid destination square
-          // (not just for clicking opponent pieces or empty squares when selecting)
-          if (selectedSquare && !possibleMoves.includes(square)) {
+          // Try to make a move from selectedSquare to square
+          const isLegalMove = chessService.isMoveLegal(selectedSquare, square);
+          
+          if (isLegalMove) {
+            // Clear selection immediately for responsive UI
+            setSelectedSquare(null);
+            
+            // Check if this is a promotion move
+            if (isPromotionMove(selectedSquare, square)) {
+              setPendingMove({ from: selectedSquare, to: square });
+              setShowPromotionModal(true);
+            } else {
+              // Make a regular move (including en passant and castling)
+              await makeMove(selectedSquare, square);
+            }
+          } else if (piece && piece[0] === gameState.turn.charAt(0)) {
+            // Select a new piece of the same color
+            setSelectedSquare(square);
+          } else {
+            // Invalid move, play illegal move sound and deselect
             soundManager.play("illegal-move");
+            setSelectedSquare(null);
           }
-          setSelectedSquare(null);
-          setPossibleMoves([]);
         }
       } else if (piece && piece[0] === gameState.turn.charAt(0)) {
         // Select a piece
         setSelectedSquare(square);
-        setPossibleMoves(chessService.getPossibleMoves(square));
-      } else if (piece && piece[0] !== gameState.turn.charAt(0)) {
-        // Trying to select opponent's piece - only play illegal sound if it's their turn
-        // (Don't play sound for just clicking on opponent pieces when it's not their turn)
-        // This is actually normal behavior, so no sound needed
       }
     },
     [
       selectedSquare,
-      possibleMoves,
       gameState,
       chessService,
       disabled,
@@ -784,8 +772,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const isLight = (rank + file) % 2 === 0;
         const isSelected = selectedSquare === square;
         
-        // Show move highlights only when NOT in check
-        const isHighlighted = !gameState.inCheck && possibleMoves.includes(square);
+        // Remove move highlighting functionality - always false
+        const isHighlighted = false;
         
         const isLastMove =
           lastMove && (lastMove.from === square || lastMove.to === square);
