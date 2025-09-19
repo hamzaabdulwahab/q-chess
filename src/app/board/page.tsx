@@ -11,6 +11,8 @@ import { useSearchParams } from "next/navigation";
 import { ChessBoard } from "@/components/ChessBoard";
 import { GameNavigator } from "@/components/GameNavigator";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ThemeProvider } from "@/lib/theme-context";
 // no NewGameChoice needed
 // useRouter no longer needed after removing online redirect
 // MemeRotator and YouTubeMiniPlayer removed by request
@@ -55,6 +57,9 @@ function BoardContent() {
     moveHistory: [] as string[],
     capturedPieces: { white: [] as string[], black: [] as string[] },
   });
+
+  // State for access denial dialog
+  const [showAccessDialog, setShowAccessDialog] = useState(false);
 
   // State to track if cursor is over the chess board (for hiding navigator)
   const [isBoardHovered, setIsBoardHovered] = useState(false);
@@ -292,19 +297,8 @@ function BoardContent() {
           if (response.status === 404) {
             console.log("Game not found, showing user-friendly message");
             
-            // Professional UX: Show a proper notification instead of alert
-            const shouldCreateNew = confirm(
-              "This game is private or doesn't exist.\n\n" +
-              "Would you like to create a new game instead?\n\n" +
-              "• Click OK to start a new game\n" +
-              "• Click Cancel to return home"
-            );
-            
-            if (shouldCreateNew) {
-              await createNewGame();
-            } else {
-              window.location.href = '/';
-            }
+            // Professional UX: Show custom dialog instead of browser confirm
+            setShowAccessDialog(true);
             return;
           }
           
@@ -410,6 +404,17 @@ function BoardContent() {
     }
   }, [startLocalGame]);
 
+  // Dialog handlers for access denial
+  const handleCreateNewGame = useCallback(async () => {
+    setShowAccessDialog(false);
+    await createNewGame();
+  }, [createNewGame]);
+
+  const handleReturnHome = useCallback(() => {
+    setShowAccessDialog(false);
+    window.location.href = '/';
+  }, []);
+
   const loadGame = useCallback(
     async (id: number) => {
       // Validate that id is a valid number
@@ -465,19 +470,8 @@ function BoardContent() {
           if (response.status === 404) {
             console.log("Game not found, showing user-friendly message");
             
-            // Professional UX: Show a proper notification instead of alert
-            const shouldCreateNew = confirm(
-              "This game is private or doesn't exist.\n\n" +
-              "Would you like to create a new game instead?\n\n" +
-              "• Click OK to start a new game\n" +
-              "• Click Cancel to return home"
-            );
-            
-            if (shouldCreateNew) {
-              await createNewGame();
-            } else {
-              window.location.href = '/';
-            }
+            // Professional UX: Show custom dialog instead of browser confirm
+            setShowAccessDialog(true);
             return;
           }
           
@@ -1020,14 +1014,40 @@ function BoardContent() {
           }
         }}
       />
+
+      {/* Access denial dialog */}
+      <ConfirmDialog
+        isOpen={showAccessDialog}
+        title="Game Access Denied"
+        message="This game is private or doesn't exist."
+        confirmText="Create New Game"
+        cancelText="Return Home"
+        onConfirm={handleCreateNewGame}
+        onCancel={handleReturnHome}
+        details={[
+          "Click 'Create New Game' to start a new game",
+          "Click 'Return Home' to go back to the main page"
+        ]}
+      />
     </>
+  );
+}
+
+function BoardWithTheme() {
+  const searchParams = useSearchParams();
+  const gameId = searchParams.get("id");
+  
+  return (
+    <ThemeProvider gameId={gameId}>
+      <BoardContent />
+    </ThemeProvider>
   );
 }
 
 export default function Board() {
   return (
     <Suspense fallback={<LoadingSpinner />}>
-      <BoardContent />
+      <BoardWithTheme />
     </Suspense>
   );
 }

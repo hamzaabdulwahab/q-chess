@@ -233,21 +233,6 @@ export const chessThemes: ChessTheme[] = [
     description: 'Industrial brushed steel finish'
   },
   {
-    id: 'sand',
-    name: 'Sandy Desert',
-    lightSquare: '#fef3c7',
-    darkSquare: '#d97706',
-    lightHover: '#fde68a',
-    darkHover: '#b45309',
-    lightCoord: '#78350f',
-    darkCoord: '#fef3c7',
-    borderColor: '#92400e',
-    lastMoveHighlight: 'rgba(251, 191, 36, 0.6)',
-    moveHighlight: 'rgba(251, 191, 36, 0.4)',
-    checkHighlight: 'rgba(220, 38, 38, 0.6)',
-    description: 'Soft sandy beige'
-  },
-  {
     id: 'lava',
     name: 'Lava Red',
     lightSquare: '#ffebeb',
@@ -272,22 +257,52 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [currentThemeId, setCurrentThemeId] = useState('dark');
+interface ThemeProviderProps {
+  children: ReactNode;
+  gameId?: string | number | null;
+}
+
+export function ThemeProvider({ children, gameId }: ThemeProviderProps) {
+  const [currentThemeId, setCurrentThemeId] = useState('autumn');
   
-  // Load theme from localStorage on mount
+  // Load theme from localStorage on mount, specific to game or global
   useEffect(() => {
-    const savedTheme = localStorage.getItem('chess-theme');
+    let themeKey: string;
+    
+    if (gameId) {
+      // Per-game theme storage
+      themeKey = `chess-theme-game-${gameId}`;
+    } else {
+      // Global theme storage for non-game pages
+      themeKey = 'chess-theme-global';
+    }
+    
+    const savedTheme = localStorage.getItem(themeKey);
+    
     if (savedTheme && chessThemes.find(t => t.id === savedTheme)) {
       setCurrentThemeId(savedTheme);
+    } else {
+      // If no saved theme for this context, set autumn as default and save it
+      setCurrentThemeId('autumn');
+      localStorage.setItem(themeKey, 'autumn');
     }
-  }, []);
+  }, [gameId]);
 
   const setTheme = (themeId: string) => {
     const theme = chessThemes.find(t => t.id === themeId);
     if (theme) {
       setCurrentThemeId(themeId);
-      localStorage.setItem('chess-theme', themeId);
+      
+      let themeKey: string;
+      if (gameId) {
+        // Save theme specific to this game
+        themeKey = `chess-theme-game-${gameId}`;
+      } else {
+        // Save global theme
+        themeKey = 'chess-theme-global';
+      }
+      
+      localStorage.setItem(themeKey, themeId);
     }
   };
 
