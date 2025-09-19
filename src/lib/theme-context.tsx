@@ -14,6 +14,7 @@ export interface ChessTheme {
   borderColor: string;
   lastMoveHighlight: string;
   moveHighlight: string;
+  checkHighlight: string;
   description: string;
 }
 
@@ -31,6 +32,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#374151',
     lastMoveHighlight: 'rgba(255, 255, 255, 0.15)',
     moveHighlight: 'rgba(255, 255, 255, 0.1)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Original dark theme'
   },
   {
@@ -45,6 +47,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#8b5e3c',
     lastMoveHighlight: 'rgba(246, 220, 150, 0.6)',
     moveHighlight: 'rgba(246, 220, 150, 0.4)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Traditional wooden chess board'
   },
   {
@@ -59,6 +62,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#3b4d2a',
     lastMoveHighlight: '#f6f669',
     moveHighlight: 'rgba(186, 202, 68, 0.5)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Official Chess.com style green board'
   },
   {
@@ -73,6 +77,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#2b4c6e',
     lastMoveHighlight: 'rgba(70, 130, 180, 0.4)',
     moveHighlight: 'rgba(70, 130, 180, 0.25)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Cool ocean colors'
   },
   {
@@ -87,6 +92,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#5b2c6f',
     lastMoveHighlight: 'rgba(187, 107, 217, 0.6)',
     moveHighlight: 'rgba(187, 107, 217, 0.3)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Majestic purple theme'
   },
   {
@@ -101,6 +107,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#5c3317',
     lastMoveHighlight: 'rgba(210, 180, 140, 0.6)',
     moveHighlight: 'rgba(210, 180, 140, 0.4)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Rich chocolate browns'
   },
   {
@@ -115,6 +122,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#991b1b',
     lastMoveHighlight: 'rgba(255, 107, 107, 0.5)',
     moveHighlight: 'rgba(255, 107, 107, 0.3)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Warm coral and pink tones'
   },
   {
@@ -129,6 +137,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#475569',
     lastMoveHighlight: 'rgba(148, 163, 184, 0.6)',
     moveHighlight: 'rgba(148, 163, 184, 0.4)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Deep midnight blues'
   },
   {
@@ -143,6 +152,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#92400e',
     lastMoveHighlight: 'rgba(251, 191, 36, 0.6)',
     moveHighlight: 'rgba(251, 191, 36, 0.4)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Warm autumn oranges and yellows'
   },
   {
@@ -157,6 +167,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#14532d',
     lastMoveHighlight: 'rgba(34, 197, 94, 0.5)',
     moveHighlight: 'rgba(34, 197, 94, 0.3)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Fresh mint green theme'
   },
   {
@@ -171,6 +182,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#9d174d',
     lastMoveHighlight: 'rgba(236, 72, 153, 0.6)',
     moveHighlight: 'rgba(236, 72, 153, 0.4)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Elegant rose and pink tones'
   },
 
@@ -187,6 +199,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#6b7280',
     lastMoveHighlight: 'rgba(209, 213, 219, 0.6)',
     moveHighlight: 'rgba(209, 213, 219, 0.4)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Modern slate grey tones'
   },
   {
@@ -201,6 +214,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#9ca3af',
     lastMoveHighlight: 'rgba(156, 163, 175, 0.5)',
     moveHighlight: 'rgba(156, 163, 175, 0.3)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Polished marble theme'
   },
   {
@@ -215,6 +229,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#6b7280',
     lastMoveHighlight: 'rgba(107, 114, 128, 0.5)',
     moveHighlight: 'rgba(107, 114, 128, 0.3)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Industrial brushed steel finish'
   },
   {
@@ -229,6 +244,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#92400e',
     lastMoveHighlight: 'rgba(251, 191, 36, 0.6)',
     moveHighlight: 'rgba(251, 191, 36, 0.4)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Soft sandy beige'
   },
   {
@@ -243,6 +259,7 @@ export const chessThemes: ChessTheme[] = [
     borderColor: '#991b1b',
     lastMoveHighlight: 'rgba(220, 38, 38, 0.5)',
     moveHighlight: 'rgba(220, 38, 38, 0.3)',
+    checkHighlight: 'rgba(220, 38, 38, 0.6)',
     description: 'Fiery red-black style'
   }
 ];

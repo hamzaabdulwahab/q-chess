@@ -136,6 +136,7 @@ interface SquareProps {
   isHighlighted: boolean;
   isLastMove: boolean;
   isCheck: boolean;
+  isCheckingPiece: boolean;
   onClick: () => void;
   fileLabel?: string | null;
   rankLabel?: string | null;
@@ -148,6 +149,7 @@ const Square: React.FC<SquareProps> = ({
   isHighlighted,
   isLastMove,
   isCheck,
+  isCheckingPiece,
   onClick,
   fileLabel,
   rankLabel,
@@ -183,11 +185,12 @@ const Square: React.FC<SquareProps> = ({
       />,
     );
   }
-  if (isCheck) {
+  if (isCheck || isCheckingPiece) {
     overlayNodes.push(
       <div
         key="check"
-        className="absolute inset-0 pointer-events-none bg-red-600/35"
+        className="absolute inset-0 pointer-events-none"
+        style={{ backgroundColor: currentTheme.checkHighlight }}
       />,
     );
   }
@@ -771,20 +774,31 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     const fileRange = [...Array(8).keys()];
     const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
+    // Get checking pieces if in check
+    const checkingPieces = gameState.inCheck ? chessService.getCheckingPieces() : [];
+
     for (const rank of rankRange) {
       for (const file of fileRange) {
         const square = coordsToSquare(file, rank);
         const piece = chessService.getPiece(square);
         const isLight = (rank + file) % 2 === 0;
         const isSelected = selectedSquare === square;
-        // No visual indication of possible moves
+        
+        // Show move highlights only when NOT in check
+        const isHighlighted = !gameState.inCheck && possibleMoves.includes(square);
+        
         const isLastMove =
           lastMove && (lastMove.from === square || lastMove.to === square);
+        
+        // King is in check
         const isCheck =
           gameState.inCheck &&
           piece &&
           ((piece === "wK" && gameState.turn === "white") ||
             (piece === "bK" && gameState.turn === "black"));
+        
+        // Piece is giving check
+        const isCheckingPiece = gameState.inCheck && checkingPieces.includes(square);
 
         // Coordinate labels (like chess.com):
         // Show file letter on the bottom edge, rank number on the left edge, based on viewer orientation
@@ -797,8 +811,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           ? String(isBlackView ? 8 - rank : rank + 1)
           : null;
 
-        // Move indicators removed: no need to compute moveType
-
         squares.push(
           <Square
             key={square}
@@ -807,9 +819,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             piece={piece}
             isLight={isLight}
             isSelected={isSelected}
-            isHighlighted={false}
+            isHighlighted={isHighlighted}
             isLastMove={Boolean(isLastMove)}
             isCheck={Boolean(isCheck)}
+            isCheckingPiece={Boolean(isCheckingPiece)}
             onClick={() => handleSquareClick(square)}
             fileLabel={fileLabel}
             rankLabel={rankLabel}
