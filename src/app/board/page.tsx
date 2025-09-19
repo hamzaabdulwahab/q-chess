@@ -281,6 +281,13 @@ function BoardContent() {
           if (isActive) setGameOver(null);
           setError(null);
         } else {
+          // Check if this is an authentication error
+          if (response.status === 401) {
+            console.log("Authentication required, redirecting to sign-in");
+            window.location.href = `/auth/signin?redirectTo=/board${window.location.search}`;
+            return;
+          }
+          
           console.warn(
             "Server load failed; keeping current view and will retry:",
             data.error,
@@ -427,6 +434,13 @@ function BoardContent() {
           if (data.game.status === "active") setGameOver(null);
           setError(null);
         } else {
+          // Check if this is an authentication error
+          if (response.status === 401) {
+            console.log("Authentication required, redirecting to sign-in");
+            window.location.href = `/auth/signin?redirectTo=/board${window.location.search}`;
+            return;
+          }
+          
           // Server failed or game not found -> fallback to local
           console.warn(
             `Game ${id} not found or server failed; staying on current view`,
