@@ -238,7 +238,7 @@ export class ChessClient {
               console.log(`Piece at ${fromSquare} (${piece.color}${piece.type}) can capture king at ${kingSquare}`);
               checkingPieces.push(fromSquare);
             }
-          } catch (error) {
+          } catch {
             // This move is not legal, continue
           }
           
@@ -258,7 +258,7 @@ export class ChessClient {
   }
 
   // Check if a piece type can attack a square based on chess rules
-  private canPieceTypeAttackSquare(piece: any, fromSquare: string, toSquare: string): boolean {
+  private canPieceTypeAttackSquare(piece: { type: string; color: string }, fromSquare: string, toSquare: string): boolean {
     const fromFile = fromSquare.charCodeAt(0) - 97; // a=0, b=1, etc.
     const fromRank = parseInt(fromSquare[1]) - 1; // 1=0, 2=1, etc.
     const toFile = toSquare.charCodeAt(0) - 97;
