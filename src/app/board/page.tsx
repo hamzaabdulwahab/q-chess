@@ -58,6 +58,28 @@ function BoardContent() {
 
   // State to track if cursor is over the chess board (for hiding navigator)
   const [isBoardHovered, setIsBoardHovered] = useState(false);
+  
+  // State to control navigator visibility (controlled by keyboard shortcut)
+  const [navigatorOpen, setNavigatorOpen] = useState(false);
+
+  // Global keyboard shortcut for navigator toggle - always active
+  useEffect(() => {
+    const handleGlobalKeydown = (ev: KeyboardEvent) => {
+      // Handle Cmd+B (Mac) or Ctrl+B (Windows/Linux) to toggle navigator
+      if (ev.key === "b" && (ev.metaKey || ev.ctrlKey)) {
+        ev.preventDefault();
+        setNavigatorOpen(prev => !prev);
+        return;
+      }
+    };
+
+    // Add global listener
+    document.addEventListener("keydown", handleGlobalKeydown);
+    
+    return () => {
+      document.removeEventListener("keydown", handleGlobalKeydown);
+    };
+  }, []); // Empty dependency array - this effect runs once and the listener persists
 
   // Effect to handle chess board hover detection
   useEffect(() => {
@@ -933,16 +955,17 @@ function BoardContent() {
       </div>
       </div>
       
-      {/* Slide-out navigator - hidden when cursor is over the chess board */}
-      {!isBoardHovered && (
-        <GameNavigator
-          onNewGame={(choice) => {
-            if (choice === "local-2v2") {
-              resetGame();
-            }
-          }}
-        />
-      )}
+      {/* Slide-out navigator - always mounted but controlled by state */}
+      <GameNavigator
+        open={navigatorOpen}
+        onOpenChange={setNavigatorOpen}
+        showButton={!isBoardHovered}
+        onNewGame={(choice) => {
+          if (choice === "local-2v2") {
+            resetGame();
+          }
+        }}
+      />
     </>
   );
 }

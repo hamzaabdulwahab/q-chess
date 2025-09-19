@@ -10,35 +10,67 @@ import { ThemeSelector } from "@/components/ThemeSelector";
 
 type Props = {
   onNewGame: (choice: NewGameChoice) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showButton?: boolean;
 };
 
-export function GameNavigator({ onNewGame }: Props) {
-  const [open, setOpen] = useState(false);
+export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, showButton = true }: Props) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [newGameOpen, setNewGameOpen] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
 
-  // Close on outside click or Escape, and handle keyboard shortcuts
+  // Use external open state if provided, otherwise use internal state
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = onOpenChange || setInternalOpen;
+
+  // Global keyboard shortcut listener - works regardless of component visibility
   useEffect(() => {
-    const onDown = (ev: MouseEvent | TouchEvent) => {
-      if (!open) return;
-      const target = ev.target as Node | null;
-      if (panelRef.current && target && panelRef.current.contains(target))
-        return;
-      setOpen(false);
-    };
-    
-    const onKey = (ev: KeyboardEvent) => {
-      // Handle Escape to close
-      if (ev.key === "Escape" && open) {
-        setOpen(false);
-        return;
-      }
-      
+    const handleGlobalKeydown = (ev: KeyboardEvent) => {
       // Handle Cmd+B (Mac) or Ctrl+B (Windows/Linux) to toggle navigator
       if (ev.key === "b" && (ev.metaKey || ev.ctrlKey)) {
         ev.preventDefault();
-        setOpen(prev => !prev);
+        if (onOpenChange) {
+          onOpenChange(!open);
+        } else {
+          setInternalOpen(prev => !prev);
+        }
+        return;
+      }
+    };
+
+    // Add global listener
+    document.addEventListener("keydown", handleGlobalKeydown);
+    
+    return () => {
+      document.removeEventListener("keydown", handleGlobalKeydown);
+    };
+  }, [open, onOpenChange]); // Include dependencies
+
+  // Close on outside click or Escape (when navigator is open)
+  useEffect(() => {
+    if (!open) return;
+
+    const onDown = (ev: MouseEvent | TouchEvent) => {
+      const target = ev.target as Node | null;
+      if (panelRef.current && target && panelRef.current.contains(target))
+        return;
+      if (onOpenChange) {
+        onOpenChange(false);
+      } else {
+        setInternalOpen(false);
+      }
+    };
+    
+    const onKey = (ev: KeyboardEvent) => {
+      // Handle Escape to close when navigator is open
+      if (ev.key === "Escape") {
+        if (onOpenChange) {
+          onOpenChange(false);
+        } else {
+          setInternalOpen(false);
+        }
         return;
       }
     };
@@ -46,6 +78,7 @@ export function GameNavigator({ onNewGame }: Props) {
     document.addEventListener("mousedown", onDown);
     document.addEventListener("touchstart", onDown, { passive: true });
     document.addEventListener("keydown", onKey);
+    
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("touchstart", onDown);
@@ -54,7 +87,11 @@ export function GameNavigator({ onNewGame }: Props) {
   }, [open]);
 
   const guardedNav = (e: React.MouseEvent, href: string) => {
-    setOpen(false);
+    if (onOpenChange) {
+      onOpenChange(false);
+    } else {
+      setInternalOpen(false);
+    }
     if ((window as unknown as Record<string, unknown>).__PROFILE_DIRTY__) {
       e.preventDefault();
       window.dispatchEvent(
@@ -66,10 +103,16 @@ export function GameNavigator({ onNewGame }: Props) {
   return (
     <>
       {/* Toggle handle (hamburger) at top-left to mirror user menu; hidden when panel is open */}
-      {!open && (
+      {!open && showButton && (
         <div className="relative">
           <button
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              if (onOpenChange) {
+                onOpenChange(true);
+              } else {
+                setInternalOpen(true);
+              }
+            }}
             onMouseEnter={() => setShowTooltip(true)}
             onMouseLeave={() => setShowTooltip(false)}
             className="fixed top-4 left-4 z-50 w-10 h-10 rounded-full border border-gray-700 text-white grid place-items-center shadow hover:bg-gray-700"
@@ -128,7 +171,13 @@ export function GameNavigator({ onNewGame }: Props) {
             Controls
           </div>
           <button
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              if (onOpenChange) {
+                onOpenChange(false);
+              } else {
+                setInternalOpen(false);
+              }
+            }}
             className="w-8 h-8 grid place-items-center rounded-md hover:bg-gray-800"
             aria-label="Close navigator"
             title="Close"
@@ -140,7 +189,11 @@ export function GameNavigator({ onNewGame }: Props) {
           <div className="space-y-3 mt-2">
             <button
               onClick={() => {
-                setOpen(false);
+                if (onOpenChange) {
+                  onOpenChange(false);
+                } else {
+                  setInternalOpen(false);
+                }
                 setNewGameOpen(true);
               }}
               className="w-full btn-accent text-black rounded-lg transition-colors"
@@ -209,7 +262,13 @@ export function GameNavigator({ onNewGame }: Props) {
       {open && (
         <button
           aria-label="Close navigator"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            if (onOpenChange) {
+              onOpenChange(false);
+            } else {
+              setInternalOpen(false);
+            }
+          }}
           className="fixed inset-0 z-30 bg-black/20"
         />
       )}
