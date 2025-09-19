@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { NewGameModal, type NewGameChoice } from "./NewGameModal";
 // Invite-related modals are not used here anymore
 import { SoundControl } from "@/components/SoundControl";
@@ -19,11 +19,28 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
   const [internalOpen, setInternalOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [newGameOpen, setNewGameOpen] = useState(false);
-  const [showTooltip, setShowTooltip] = useState(false);
-
+  
   // Use external open state if provided, otherwise use internal state
   const open = externalOpen !== undefined ? externalOpen : internalOpen;
-  const setOpen = onOpenChange || setInternalOpen;
+  
+  // State for tooltip visibility - should only be true when hovering navigator button
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  // Debug: Reset tooltip when navigator opens or button is hidden
+  useEffect(() => {
+    if (open || !showButton) {
+      setShowTooltip(false);
+    }
+  }, [open, showButton, onOpenChange]);
+  
+  // Memoized toggle function to prevent useEffect dependency issues
+  const toggleNavigator = useCallback(() => {
+    if (onOpenChange) {
+      onOpenChange(!open);
+    } else {
+      setInternalOpen(prev => !prev);
+    }
+  }, [open, onOpenChange]);
 
   // Global keyboard shortcut listener - works regardless of component visibility
   useEffect(() => {
@@ -31,11 +48,7 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
       // Handle Cmd+B (Mac) or Ctrl+B (Windows/Linux) to toggle navigator
       if (ev.key === "b" && (ev.metaKey || ev.ctrlKey)) {
         ev.preventDefault();
-        if (onOpenChange) {
-          onOpenChange(!open);
-        } else {
-          setInternalOpen(prev => !prev);
-        }
+        toggleNavigator();
         return;
       }
     };
@@ -46,7 +59,7 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
     return () => {
       document.removeEventListener("keydown", handleGlobalKeydown);
     };
-  }, [open, onOpenChange]); // Include dependencies
+  }, [toggleNavigator]); // Now properly depends on the memoized function
 
   // Close on outside click or Escape (when navigator is open)
   useEffect(() => {
