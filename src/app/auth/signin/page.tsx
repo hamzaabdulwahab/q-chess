@@ -55,42 +55,10 @@ export default function SignIn() {
       
       const supabase = getSupabaseBrowser();
       
-      // Check for account lockout before attempting login
-      const { data: lockoutStatus, error: lockoutError } = await supabase
-        .rpc('check_account_lockout', { user_email: trimmedEmail });
-      
-      if (lockoutError) {
-        console.warn('Lockout check failed:', lockoutError);
-        // Continue with login attempt if lockout check fails
-      } else if (lockoutStatus?.locked) {
-        const unlockTime = new Date(lockoutStatus.unlock_time);
-        const now = new Date();
-        const minutesLeft = Math.ceil((unlockTime.getTime() - now.getTime()) / (1000 * 60));
-        setError(`Account temporarily locked due to multiple failed attempts. Try again in ${minutesLeft} minute(s).`);
-        setLoading(false);
-        return;
-      }
-      
       const { error: signErr } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password,
       });
-      
-      // Log the login attempt (success or failure)
-      const clientIP = null; // Can't get real IP on client side easily
-      const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : null;
-      
-      try {
-        await supabase.rpc('log_login_attempt', {
-          user_email: trimmedEmail,
-          success_status: !signErr,
-          client_ip: clientIP,
-          client_user_agent: userAgent
-        });
-      } catch (logErr) {
-        console.warn('Failed to log login attempt:', logErr);
-        // Don't fail the login process if logging fails
-      }
       
       if (signErr) throw signErr;
       
