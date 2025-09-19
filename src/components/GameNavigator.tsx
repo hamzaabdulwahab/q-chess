@@ -53,7 +53,8 @@ export function GameNavigator({ onNewGame }: Props) {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed top-4 left-4 z-50 w-10 h-10 rounded-full border border-gray-700 bg-gray-800/90 text-white grid place-items-center shadow hover:bg-gray-700"
+          className="fixed top-4 left-4 z-50 w-10 h-10 rounded-full border border-gray-700 text-white grid place-items-center shadow hover:bg-gray-700"
+          style={{ backgroundColor: '#0F0C08' }}
           aria-expanded={open}
           aria-controls="game-navigator"
           aria-label="Open navigator"
@@ -67,9 +68,10 @@ export function GameNavigator({ onNewGame }: Props) {
       <div
         id="game-navigator"
         ref={panelRef}
-        className={`fixed top-0 left-0 z-40 h-screen w-64 transform transition-transform duration-200 ease-out bg-gray-900 border-r border-gray-700 shadow-xl ${
+        className={`fixed top-0 left-0 z-40 h-screen w-64 transform transition-transform duration-200 ease-out border-r border-gray-700 shadow-xl ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{ backgroundColor: '#0F0C08' }}
       >
         <div className="p-4 pb-2 text-white flex items-center justify-between">
           <div className="text-sm uppercase tracking-wide text-gray-400">

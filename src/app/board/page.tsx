@@ -854,7 +854,7 @@ function BoardContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-gray-900 text-white flex flex-col pb-12 overflow-x-hidden">
+      <div className="min-h-screen text-white flex flex-col pb-12 overflow-x-hidden" style={{ backgroundColor: '#141414' }}>
       <div className="container mx-auto px-4 py-4 flex-0">
         {/* Online/Offline + Queue status */}
         <div className="mb-2 flex items-center gap-3 text-sm text-gray-300 hidden">
