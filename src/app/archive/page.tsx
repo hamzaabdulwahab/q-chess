@@ -3,7 +3,17 @@
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { RefreshCw, Play, Eye, ArrowLeft } from "lucide-react";
+import {
+  RefreshCw,
+  Play,
+  Eye,
+  ArrowLeft,
+  Trash2,
+  Crown,
+  Handshake,
+  Scale,
+  HelpCircle,
+} from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import {
   ArchiveFilters,
@@ -90,6 +100,13 @@ function ArchivePageContent() {
     try {
       setLoading(true);
       const response = await fetch("/api/games");
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const data = await response.json();
       if (response.ok) {
         setGames(data.games || []);
@@ -101,6 +118,71 @@ function ArchivePageContent() {
       console.error("Error fetching games:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deleteGame = async (gameId: number) => {
+    try {
+      const response = await fetch(`/api/games?id=${gameId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setGames(games.filter((game) => game.id !== gameId));
+      } else {
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          setError(data.error || "Failed to delete game");
+        } else {
+          setError("Failed to delete game - server error");
+        }
+      }
+    } catch (err) {
+      setError("Failed to delete game");
+      console.error("Error deleting game:", err);
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active":
+        return "text-green-400";
+      case "checkmate":
+        return "text-red-400";
+      case "draw":
+        return "text-yellow-400";
+      case "stalemate":
+        return "text-gray-400";
+      default:
+        return "text-gray-400";
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    const cls = "w-4 h-4";
+    switch (status) {
+      case "active":
+        return <Play className={cls} />;
+      case "checkmate":
+        return <Crown className={cls} />;
+      case "draw":
+        return <Handshake className={cls} />;
+      case "stalemate":
+        return <Scale className={cls} />;
+      default:
+        return <HelpCircle className={cls} />;
     }
   };
 
@@ -168,7 +250,7 @@ function ArchivePageContent() {
           <div className="text-center text-red-400">{error}</div>
         ) : games.length === 0 ? (
           <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-accent/30 rounded-xl p-8 text-center shadow-2xl">
-            <div className="text-7xl mb-4">\u2654</div>
+            <div className="text-7xl mb-4">♔</div>
             <h3 className="text-2xl font-semibold mb-2 text-accent">
               No archived games yet
             </h3>
@@ -179,7 +261,7 @@ function ArchivePageContent() {
               href="/"
               className="btn-accent text-black px-8 py-3 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg inline-block"
             >
-              \u2654 Home
+              ♔ Home
             </Link>
           </div>
         ) : (
@@ -194,19 +276,54 @@ function ArchivePageContent() {
                     <h3 className="text-lg font-semibold mb-1 text-accent">
                       Game #{game.id}
                     </h3>
-                    <div className="flex items-center space-x-2 text-sm text-gray-400">
-                      <span className="capitalize">{game.status}</span>
-                      <span>•</span>
-                      <span>{game.totalMoves} moves</span>
-                      {game.winner && (
-                        <>
-                          <span>•</span>
-                          <span>Winner: {String(game.winner)}</span>
-                        </>
-                      )}
+                    <div className="flex items-center space-x-2">
+                      <span>{getStatusIcon(game.status)}</span>
+                      <span
+                        className={`text-sm font-medium ${getStatusColor(
+                          game.status,
+                        )}`}
+                      >
+                        {game.status.charAt(0).toUpperCase() +
+                          game.status.slice(1)}
+                      </span>
                     </div>
                   </div>
+                  <button
+                    onClick={() => deleteGame(game.id)}
+                    className="text-red-400 hover:text-red-300 transition-colors text-sm hover:scale-110 transform"
+                    title="Delete game"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
+
+                <div className="space-y-2 mb-4 text-sm text-gray-400">
+                  <div className="flex justify-between">
+                    <span>Moves:</span>
+                    <span>{game.totalMoves}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Current turn:</span>
+                    <span className="capitalize">{game.current_player}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Created:</span>
+                    <span>{formatDate(game.created_at)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Last played:</span>
+                    <span>{formatDate(game.updated_at)}</span>
+                  </div>
+                  {game.winner && (
+                    <div className="flex justify-between">
+                      <span>Winner:</span>
+                      <span className="capitalize font-medium text-yellow-400">
+                        {game.winner}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex space-x-2">
                   <Link
                     href={`/board?id=${game.id}`}
