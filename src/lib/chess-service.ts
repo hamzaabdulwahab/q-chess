@@ -432,7 +432,7 @@ export class ChessService {
       const isPromotion = this.isPromotionMove(from, to);
 
       // Insert move
-      await supabase.from("moves").insert({
+      const { error: moveError } = await supabase.from("moves").insert({
         game_id: gameId,
         move_number: moveNumber,
         player,
@@ -448,9 +448,14 @@ export class ChessService {
         is_promotion: isPromotion,
       });
 
+      if (moveError) {
+        console.error("Failed to insert move:", moveError);
+        throw new Error(`Database error inserting move: ${moveError.message}`);
+      }
+
       // Update game state
-  const nextTurnColor = this.chess.turn() === "w" ? "white" : "black"; // For checkmate: loser; for active: side to move
-      await supabase
+      const nextTurnColor = this.chess.turn() === "w" ? "white" : "black"; // For checkmate: loser; for active: side to move
+      const { error: gameError } = await supabase
         .from("games")
         .update({
           fen: fenAfter,
@@ -462,6 +467,11 @@ export class ChessService {
           // If you later add a dedicated column, also store checkmated_player: nextTurnColor when gameStatus === 'checkmate'
         })
         .eq("id", gameId);
+
+      if (gameError) {
+        console.error("Failed to update game state:", gameError);
+        throw new Error(`Database error updating game: ${gameError.message}`);
+      }
 
       return {
         success: true,

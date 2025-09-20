@@ -664,20 +664,73 @@ function BoardContent() {
     <>
       <div className="min-h-screen text-white flex flex-col pb-12 overflow-x-hidden" style={{ backgroundColor: '#141414' }}>
       <div className="container mx-auto px-4 py-4 flex-0">
-        {/* Clean offline status indicator - no more complex queue management */}
+        {/* Clean offline status indicator - styled dialog matching theme */}
         <div className="mb-2 flex items-center gap-3 text-sm text-gray-300">
-          {!isOnline && (
-            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-red-500/30 bg-red-500/10 text-red-300">
-              <span className="w-2 h-2 rounded-full bg-red-400" /> 
-              No Internet Connection - Game Disabled
-            </span>
-          )}
           {error && (
             <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-red-500/30 bg-red-500/10 text-red-300">
               <span className="w-2 h-2 rounded-full bg-red-400" /> {error}
             </span>
           )}
         </div>
+
+        {/* Styled offline dialog matching ConfirmDialog theme */}
+        {!isOnline && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="offline-title"
+            aria-describedby="offline-message"
+          >
+            <div 
+              className="relative max-w-md w-full rounded-lg shadow-2xl border transform transition-all duration-200 ease-out scale-100"
+              style={{ 
+                backgroundColor: '#1a1a1a',
+                borderColor: '#333',
+              }}
+            >
+              {/* Header */}
+              <div className="px-6 pt-6 pb-4">
+                <h3 
+                  id="offline-title"
+                  className="text-lg font-semibold text-white"
+                  style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+                >
+                  Game Disabled - No Internet
+                </h3>
+              </div>
+
+              {/* Content */}
+              <div className="px-6 pb-6">
+                <p 
+                  id="offline-message"
+                  className="text-gray-300 leading-relaxed"
+                  style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+                >
+                  The game is temporarily disabled while offline to ensure your moves are properly saved.
+                </p>
+                
+                <ul className="mt-4 space-y-2">
+                  <li 
+                    className="text-sm text-gray-400 flex items-start"
+                    style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+                  >
+                    <span className="mr-2 text-gray-500">•</span>
+                    Connect to the internet to resume playing
+                  </li>
+                  <li 
+                    className="text-sm text-gray-400 flex items-start"
+                    style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+                  >
+                    <span className="mr-2 text-gray-500">•</span>
+                    Your current game progress is safely preserved
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       <div className="flex-1 flex items-center justify-center px-4 overflow-hidden">
         {/* Chess Board centered with tiles connected to board edges */}

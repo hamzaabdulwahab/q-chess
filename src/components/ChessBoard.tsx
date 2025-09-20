@@ -455,7 +455,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 }),
               });
               console.log("Move API response:", response.status, response.statusText);
-              const result = await response.json().catch(() => null);
+              const result = await response.json().catch((jsonError) => {
+                console.error("Failed to parse JSON response:", jsonError);
+                return null;
+              });
               console.log("Move API result:", result);
               
               if (response.ok && result && result.success) {
@@ -498,11 +501,21 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 });
               } else {
                 // Server error - log but keep optimistic state (will be inconsistent but user knows)
-                console.error("Failed to save move to server:", response.status, result);
+                console.error("Failed to save move to server:", {
+                  status: response.status,
+                  statusText: response.statusText,
+                  result,
+                  gameId,
+                  move: { from, to, promotion }
+                });
               }
             } catch (error) {
               // Network error - log but keep optimistic state
-              console.error("Network error saving move:", error);
+              console.error("Network error saving move:", {
+                error,
+                gameId,
+                move: { from, to, promotion }
+              });
             }
           })();
 
