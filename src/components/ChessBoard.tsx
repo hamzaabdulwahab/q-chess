@@ -341,12 +341,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
       winner: status.isCheckmate
         ? status.turn === "white"
-          ? "white"
-          : "black"
+          ? "black"
+          : "white"
         : status.isStalemate || status.isDraw
           ? "draw"
           : null,
-      skipEndScreen: viewMode,
+      skipEndScreen: false, // Always show end screen for completed games
     });
     // Play game start sound for new games (starting position)
     if (
@@ -411,8 +411,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
             winner: status.isCheckmate
               ? status.turn === "white"
-                ? "white"
-                : "black"
+                ? "black"
+                : "white"
               : status.isStalemate || status.isDraw
                 ? "draw"
                 : null,
@@ -485,8 +485,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
                   winner: s.isCheckmate
                     ? s.turn === "white"
-                      ? "white"
-                      : "black"
+                      ? "black"
+                      : "white"
                     : s.isStalemate || s.isDraw
                       ? "draw"
                       : null,
@@ -616,8 +616,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
             winner: status.isCheckmate
               ? status.turn === "white"
-                ? "white" // If it's white's turn and checkmate, white wins
-                : "black" // If it's black's turn and checkmate, black wins
+                ? "black" // If it's white's turn and checkmate, black wins (white is checkmated)
+                : "white" // If it's black's turn and checkmate, white wins (black is checkmated)
               : status.isStalemate || status.isDraw
                 ? "draw"
                 : null,
