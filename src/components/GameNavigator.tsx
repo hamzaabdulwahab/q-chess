@@ -31,7 +31,7 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
     if (open || !showButton) {
       setShowTooltip(false);
     }
-  }, [open, showButton, onOpenChange]);
+  }, [open, showButton]);
   
   // Memoized toggle function to prevent useEffect dependency issues
   const toggleNavigator = useCallback(() => {
