@@ -75,7 +75,7 @@ function HomeContent() {
   const fetchGames = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/games");
+      const response = await fetch("/api/games", { cache: 'no-store' });
       
       // Check if response is JSON before parsing
       const contentType = response.headers.get('content-type');
@@ -223,7 +223,6 @@ function HomeContent() {
     if (wins.includes(win as Winner)) setWinner(win as Winner);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   // Persist filters to URL when they change
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());

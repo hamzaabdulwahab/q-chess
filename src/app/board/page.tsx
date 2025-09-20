@@ -167,7 +167,7 @@ function BoardContent() {
     ) => {
       try {
         console.log(`Loading game data for ${id}...`);
-        const response = await fetch(`/api/games/${id}`);
+  const response = await fetch(`/api/games/${id}`, { cache: 'no-store' });
         
         // Check if response is JSON before parsing
         const contentType = response.headers.get('content-type');
@@ -325,7 +325,7 @@ function BoardContent() {
         // Load the game data inline to avoid dependency issues
         try {
           console.log(`Loading game data for ${data.gameId}...`);
-          const gameResponse = await fetch(`/api/games/${data.gameId}`);
+          const gameResponse = await fetch(`/api/games/${data.gameId}`, { cache: 'no-store' });
           
           // Check if response is JSON before parsing
           const gameContentType = gameResponse.headers.get('content-type');
@@ -400,7 +400,7 @@ function BoardContent() {
       try {
         setLoading(true);
         console.log(`Loading game ${id}...`);
-        const response = await fetch(`/api/games/${id}`);
+  const response = await fetch(`/api/games/${id}`, { cache: 'no-store' });
         
         // Check if response is JSON before parsing
         const contentType = response.headers.get('content-type');
@@ -597,7 +597,7 @@ function BoardContent() {
         // Best-effort resync soon, but ignore stale responses that don't reflect our move yet
         setTimeout(
           () => loadGameData(effectiveGameId, { resetClocks: false }),
-          150,
+          250,
         );
       }
     }

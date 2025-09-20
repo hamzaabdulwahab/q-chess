@@ -2,46 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { ChessService } from "@/lib/chess-service";
 import { getSupabaseServer } from "@/lib/supabase-server";
 
-// Simple in-memory cache for individual games
-interface GameCacheEntry {
-  data: unknown;
-  timestamp: number;
-}
-
-const gameCache = new Map<string, GameCacheEntry>();
-const CACHE_TTL = 15 * 1000; // 15 seconds cache for individual games
-
+// Note: Removed in-memory caching to guarantee immediate consistency after moves
 function getGameCacheKey(gameId: number) {
   return `game:${gameId}`;
-}
-
-function getCachedGame(cacheKey: string): unknown | null {
-  const entry = gameCache.get(cacheKey);
-  if (!entry) return null;
-  
-  if (Date.now() - entry.timestamp > CACHE_TTL) {
-    gameCache.delete(cacheKey);
-    return null;
-  }
-  
-  return entry.data;
-}
-
-function setCachedGame(cacheKey: string, data: unknown) {
-  gameCache.set(cacheKey, {
-    data,
-    timestamp: Date.now()
-  });
-  
-  // Cleanup old entries periodically
-  if (gameCache.size > 500) {
-    const now = Date.now();
-    for (const [key, entry] of gameCache.entries()) {
-      if (now - entry.timestamp > CACHE_TTL) {
-        gameCache.delete(key);
-      }
-    }
-  }
 }
 
 export async function GET(
@@ -82,16 +45,6 @@ export async function GET(
       );
     }
 
-    // Check cache first (user-specific cache)
-    const cacheKey = `${getGameCacheKey(gameId)}:${user.id}`;
-    const cachedGame = getCachedGame(cacheKey);
-    
-    if (cachedGame) {
-      const response = NextResponse.json({ game: cachedGame });
-      response.headers.set('X-Cache', 'HIT');
-      return response;
-    }
-
     // SECURITY: Use authenticated Supabase client to enforce RLS
     const game = await ChessService.getGameForUser(gameId, user.id);
 
@@ -99,12 +52,9 @@ export async function GET(
       return NextResponse.json({ error: "Game not found or access denied" }, { status: 404 });
     }
 
-    // Cache the result with user-specific key
-    setCachedGame(cacheKey, game);
-
     const response = NextResponse.json({ game });
-    response.headers.set('X-Cache', 'MISS');
-    response.headers.set('Cache-Control', 'private, max-age=15');
+    // Ensure no client/proxy caching; always fresh
+    response.headers.set('Cache-Control', 'no-store');
     return response;
   } catch (error) {
     console.error("Error fetching game:", error);
@@ -204,9 +154,20 @@ export async function POST(
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    // Invalidate cache after making a move
-    const cacheKey = getGameCacheKey(gameId);
-    gameCache.delete(cacheKey);
+    // Invalidate any local caches using this game id (defensive; GET is no-store now)
+    try {
+      const cachePrefix = getGameCacheKey(gameId);
+      // @ts-expect-error: legacy in-memory cache may not exist at runtime
+      if (typeof gameCache !== 'undefined') {
+        // @ts-expect-error: keys() may not exist on legacy cache shim
+        for (const key of Array.from(gameCache.keys?.() ?? []) as string[]) {
+          if ((key as string).startsWith(cachePrefix)) {
+            // @ts-expect-error: delete on legacy cache shim
+            gameCache.delete(key);
+          }
+        }
+      }
+    } catch {}
 
     return NextResponse.json({
       ...result,

@@ -2,48 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { ChessService } from "@/lib/chess-service";
 import { getSupabaseServer } from "@/lib/supabase-server";
 
-// Simple in-memory cache for games (in production, use Redis or similar)
-interface CacheEntry {
-  data: unknown;
-  timestamp: number;
-  userId: string;
-}
-
-const gameCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 30 * 1000; // 30 seconds cache
-
+// Note: Removed in-memory caching to prevent stale archives after moves
 function getCacheKey(userId: string, endpoint: string) {
   return `${endpoint}:${userId}`;
-}
-
-function getCachedData(cacheKey: string): unknown | null {
-  const entry = gameCache.get(cacheKey);
-  if (!entry) return null;
-  
-  if (Date.now() - entry.timestamp > CACHE_TTL) {
-    gameCache.delete(cacheKey);
-    return null;
-  }
-  
-  return entry.data;
-}
-
-function setCachedData(cacheKey: string, data: unknown, userId: string) {
-  gameCache.set(cacheKey, {
-    data,
-    timestamp: Date.now(),
-    userId
-  });
-  
-  // Cleanup old entries periodically
-  if (gameCache.size > 1000) {
-    const now = Date.now();
-    for (const [key, entry] of gameCache.entries()) {
-      if (now - entry.timestamp > CACHE_TTL) {
-        gameCache.delete(key);
-      }
-    }
-  }
 }
 
 export async function GET(request: NextRequest) {
@@ -67,16 +28,6 @@ export async function GET(request: NextRequest) {
     // Validate pagination parameters
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100); // Max 100 games per request
-
-    // Create cache key that includes pagination
-    const cacheKey = getCacheKey(user.id, `games:${validPage}:${validLimit}:${includeMoves}`);
-    const cachedGames = getCachedData(cacheKey);
-    
-    if (cachedGames) {
-      const response = NextResponse.json(cachedGames);
-      response.headers.set('X-Cache', 'HIT');
-      return response;
-    }
 
     // Get games with pagination
     let result;
@@ -115,12 +66,9 @@ export async function GET(request: NextRequest) {
       };
     }
     
-    // Cache the result
-    setCachedData(cacheKey, result, user.id);
-    
-    const response = NextResponse.json(result);
-    response.headers.set('X-Cache', 'MISS');
-    response.headers.set('Cache-Control', 'private, max-age=30');
+  const response = NextResponse.json(result);
+  // Always serve latest list
+  response.headers.set('Cache-Control', 'no-store');
     return response;
   } catch (error) {
     console.error("Error fetching games:", error);
@@ -144,9 +92,20 @@ export async function POST() {
     
     const gameId = await ChessService.createNewGame(user.id);
     
-    // Invalidate cache after creating a new game
-    const cacheKey = getCacheKey(user.id, 'games');
-    gameCache.delete(cacheKey);
+    // Defensive: if any in-memory cache existed, clear per-user games prefixes
+    try {
+      // @ts-expect-error: legacy in-memory cache may not exist at runtime
+      if (typeof gameCache !== 'undefined') {
+        const prefix = getCacheKey(user.id, 'games');
+        // @ts-expect-error: keys() may not exist on legacy cache shim
+        for (const key of Array.from(gameCache.keys?.() ?? []) as string[]) {
+          if ((key as string).startsWith(prefix)) {
+            // @ts-expect-error: delete on legacy cache shim
+            gameCache.delete(key);
+          }
+        }
+      }
+    } catch {}
     
     return NextResponse.json({ gameId });
   } catch (error) {
@@ -176,9 +135,20 @@ export async function DELETE(request: NextRequest) {
       // Delete all games
       const deletedCount = await ChessService.deleteAllGames();
       
-      // Invalidate cache after deleting all games
-      const cacheKey = getCacheKey(user.id, 'games');
-      gameCache.delete(cacheKey);
+      // Defensive cache clear
+      try {
+        // @ts-expect-error: legacy in-memory cache may not exist at runtime
+        if (typeof gameCache !== 'undefined') {
+          const prefix = getCacheKey(user.id, 'games');
+          // @ts-expect-error: keys() may not exist on legacy cache shim
+          for (const key of Array.from(gameCache.keys?.() ?? []) as string[]) {
+            if ((key as string).startsWith(prefix)) {
+              // @ts-expect-error: delete on legacy cache shim
+              gameCache.delete(key);
+            }
+          }
+        }
+      } catch {}
       
       return NextResponse.json({
         success: true,
@@ -196,9 +166,20 @@ export async function DELETE(request: NextRequest) {
     const success = await ChessService.deleteGame(parseInt(gameId));
 
     if (success) {
-      // Invalidate cache after deleting a game
-      const cacheKey = getCacheKey(user.id, 'games');
-      gameCache.delete(cacheKey);
+      // Defensive cache clear
+      try {
+        // @ts-expect-error: legacy in-memory cache may not exist at runtime
+        if (typeof gameCache !== 'undefined') {
+          const prefix = getCacheKey(user.id, 'games');
+          // @ts-expect-error: keys() may not exist on legacy cache shim
+          for (const key of Array.from(gameCache.keys?.() ?? []) as string[]) {
+            if ((key as string).startsWith(prefix)) {
+              // @ts-expect-error: delete on legacy cache shim
+              gameCache.delete(key);
+            }
+          }
+        }
+      } catch {}
       
       return NextResponse.json({ success: true });
     } else {

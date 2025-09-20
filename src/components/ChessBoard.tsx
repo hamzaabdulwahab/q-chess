@@ -443,6 +443,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               const response = await fetch(`/api/games/${gameId}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                cache: "no-store",
+                // Ensure the request isn't canceled on navigation
+                keepalive: true,
                 body: JSON.stringify({
                   from,
                   to,
@@ -500,7 +503,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   skipEndScreen: false,
                 });
               } else {
-                // Server error - log but keep optimistic state (will be inconsistent but user knows)
+                // Server error - revert optimistic state to avoid divergence
                 console.error("Failed to save move to server:", {
                   status: response.status,
                   statusText: response.statusText,
@@ -508,14 +511,50 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   gameId,
                   move: { from, to, promotion }
                 });
+                const revert = new ChessClient(prevFen);
+                setChessService(revert);
+                const s = revert.getGameStatus();
+                setGameState({
+                  fen: prevFen,
+                  turn: revert.getCurrentTurn(),
+                  inCheck: s.isInCheck && !s.isCheckmate,
+                  gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
+                  winner: s.isCheckmate
+                    ? s.turn === "white"
+                      ? "black"
+                      : "white"
+                    : s.isStalemate || s.isDraw
+                      ? "draw"
+                      : null,
+                  skipEndScreen: false,
+                });
+                soundManager.play("illegal-move");
               }
             } catch (error) {
-              // Network error - log but keep optimistic state
+              // Network error - revert optimistic state, since offline play is disabled
               console.error("Network error saving move:", {
                 error,
                 gameId,
                 move: { from, to, promotion }
               });
+              const revert = new ChessClient(prevFen);
+              setChessService(revert);
+              const s = revert.getGameStatus();
+              setGameState({
+                fen: prevFen,
+                turn: revert.getCurrentTurn(),
+                inCheck: s.isInCheck && !s.isCheckmate,
+                gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
+                winner: s.isCheckmate
+                  ? s.turn === "white"
+                    ? "black"
+                    : "white"
+                  : s.isStalemate || s.isDraw
+                    ? "draw"
+                    : null,
+                skipEndScreen: false,
+              });
+              soundManager.play("illegal-move");
             }
           })();
 
