@@ -437,163 +437,72 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             promotion,
           });
 
-          // Persist to server in background and reconcile
+          // Persist to server - no more complex queuing, fail cleanly if offline
           (async () => {
-            let retryCount = 0;
-            const maxRetries = 3;
-            
-            while (retryCount < maxRetries) {
-              try {
-                const response = await fetch(`/api/games/${gameId}`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    from,
-                    to,
-                    promotion,
-                    // idempotency and conflict detection
-                    clientMoveId,
-                    expectedPly,
-                    prevFen,
-                    san: local.san,
-                  }),
-                });
-                console.log("Move API response:", response.status, response.statusText);
-                const result = await response.json().catch(() => null);
-                console.log("Move API result:", result);
-                
-                if (response.ok && result && result.success) {
-                  // Only update if the server FEN is different from our current optimistic state
-                  const currentFen = chessService.getFen();
-                  if (result.fen !== currentFen) {
-                    const newChessService = new ChessClient(result.fen);
-                    setChessService(newChessService);
-                    const s = newChessService.getGameStatus();
-                    setGameState({
-                      fen: result.fen,
-                      turn: newChessService.getCurrentTurn(),
-                      inCheck: s.isInCheck && result.gameStatus === "active",
-                      gameOver: result.gameStatus !== "active",
-                      winner: result.winner,
-                      skipEndScreen: false,
-                    });
-                  }
-                  // If FEN matches, our optimistic update was correct, no need to re-render
-                  break; // Success, exit retry loop
-                } else if (response.ok && result && result.success === false) {
-                  // Server asserts move is illegal -> revert
-                  soundManager.play("illegal-move");
-                  const revert = new ChessClient(prevFen);
-                  setChessService(revert);
-                  const s = revert.getGameStatus();
+            try {
+              const response = await fetch(`/api/games/${gameId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  from,
+                  to,
+                  promotion,
+                  // idempotency and conflict detection
+                  clientMoveId,
+                  expectedPly,
+                  prevFen,
+                  san: local.san,
+                }),
+              });
+              console.log("Move API response:", response.status, response.statusText);
+              const result = await response.json().catch(() => null);
+              console.log("Move API result:", result);
+              
+              if (response.ok && result && result.success) {
+                // Only update if the server FEN is different from our current optimistic state
+                const currentFen = chessService.getFen();
+                if (result.fen !== currentFen) {
+                  const newChessService = new ChessClient(result.fen);
+                  setChessService(newChessService);
+                  const s = newChessService.getGameStatus();
                   setGameState({
-                    fen: prevFen,
-                    turn: revert.getCurrentTurn(),
-                    inCheck: s.isInCheck && !s.isCheckmate,
-                    gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
-                    winner: s.isCheckmate
-                      ? s.turn === "white"
-                        ? "black"
-                        : "white"
-                      : s.isStalemate || s.isDraw
-                        ? "draw"
-                        : null,
+                    fen: result.fen,
+                    turn: newChessService.getCurrentTurn(),
+                    inCheck: s.isInCheck && result.gameStatus === "active",
+                    gameOver: result.gameStatus !== "active",
+                    winner: result.winner,
                     skipEndScreen: false,
                   });
-                  break; // Server rejected, don't retry
-                } else {
-                  // Non-OK response - retry or queue
-                  retryCount++;
-                  if (retryCount >= maxRetries) {
-                    console.warn("Move failed after retries, queuing. Status:", response.status, "Result:", result);
-                    // Queue for retry after max retries
-                    try {
-                      if (gameId) {
-                        const key = `queuedMoves:${gameId}`;
-                        const raw = localStorage.getItem(key);
-                        const queue: Array<{
-                          from: string;
-                          to: string;
-                          promotion: string | null;
-                          ts: number;
-                          clientMoveId: string;
-                          expectedPly: number;
-                          prevFen: string;
-                          san?: string;
-                        }> = raw ? JSON.parse(raw) : [];
-                        queue.push({
-                          from,
-                          to,
-                          promotion: promotion ?? null,
-                          ts: Date.now(),
-                          clientMoveId,
-                          expectedPly,
-                          prevFen,
-                          san: local.san,
-                        });
-                        localStorage.setItem(key, JSON.stringify(queue));
-                        try {
-                          window.dispatchEvent(
-                            new CustomEvent("chess-queue-updated", {
-                              detail: { gameId, length: queue.length },
-                            }),
-                          );
-                        } catch {}
-                      }
-                    } catch {}
-                  } else {
-                    console.log(`Retrying move (attempt ${retryCount}/${maxRetries})...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
-                  }
                 }
-              } catch (error) {
-                retryCount++;
-                console.warn(`Network error on attempt ${retryCount}/${maxRetries}:`, error);
-                if (retryCount >= maxRetries) {
-                  // Network error -> keep optimistic state and queue move for later sync
-                  console.warn("Network error after retries, queuing for retry");
-                  try {
-                    if (gameId) {
-                      const key = `queuedMoves:${gameId}`;
-                      const raw = localStorage.getItem(key);
-                      const queue: Array<{
-                        from: string;
-                        to: string;
-                        promotion: string | null;
-                        ts: number;
-                        clientMoveId: string;
-                        expectedPly: number;
-                        prevFen: string;
-                        san?: string;
-                      }> = raw ? JSON.parse(raw) : [];
-                      queue.push({
-                        from,
-                        to,
-                        promotion: promotion ?? null,
-                        ts: Date.now(),
-                        clientMoveId,
-                        expectedPly,
-                        prevFen,
-                        san: local.san,
-                      });
-                      localStorage.setItem(key, JSON.stringify(queue));
-                      // Notify listeners (Board page) that queue length changed
-                      try {
-                        window.dispatchEvent(
-                          new CustomEvent("chess-queue-updated", {
-                            detail: { gameId, length: queue.length },
-                          }),
-                        );
-                      } catch {}
-                    }
-                  } catch {
-                    // ignore storage issues
-                  }
-                } else {
-                  console.log(`Retrying after network error (attempt ${retryCount}/${maxRetries})...`);
-                  await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
-                }
+                // Success - move persisted correctly
+              } else if (response.ok && result && result.success === false) {
+                // Server asserts move is illegal -> revert
+                console.warn("Server rejected move, reverting");
+                soundManager.play("illegal-move");
+                const revert = new ChessClient(prevFen);
+                setChessService(revert);
+                const s = revert.getGameStatus();
+                setGameState({
+                  fen: prevFen,
+                  turn: revert.getCurrentTurn(),
+                  inCheck: s.isInCheck && !s.isCheckmate,
+                  gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
+                  winner: s.isCheckmate
+                    ? s.turn === "white"
+                      ? "black"
+                      : "white"
+                    : s.isStalemate || s.isDraw
+                      ? "draw"
+                      : null,
+                  skipEndScreen: false,
+                });
+              } else {
+                // Server error - log but keep optimistic state (will be inconsistent but user knows)
+                console.error("Failed to save move to server:", response.status, result);
               }
+            } catch (error) {
+              // Network error - log but keep optimistic state
+              console.error("Network error saving move:", error);
             }
           })();
 
@@ -651,35 +560,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           });
           setLastMove({ from, to });
 
-          // Queue this move for later server sync when a gameId becomes available
-          try {
-            const key = "queuedMoves:offline";
-            const raw = localStorage.getItem(key);
-            const queue: Array<{
-              from: string;
-              to: string;
-              promotion: string | null;
-              ts: number;
-              san?: string;
-            }> = raw ? JSON.parse(raw) : [];
-            queue.push({
-              from,
-              to,
-              promotion: promotion ?? null,
-              ts: Date.now(),
-              san: result.san,
-            });
-            localStorage.setItem(key, JSON.stringify(queue));
-            try {
-              window.dispatchEvent(
-                new CustomEvent("chess-queue-updated", {
-                  detail: { gameId: "offline", length: queue.length },
-                }),
-              );
-            } catch {}
-          } catch {
-            // ignore storage issues
-          }
+          // REMOVED: Offline queue logic - local games are now purely local
+          // No more complex queue management for offline synchronization
 
           if (onMove) {
             onMove({
