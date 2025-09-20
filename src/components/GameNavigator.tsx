@@ -97,7 +97,7 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
       document.removeEventListener("touchstart", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, onOpenChange]);
 
   const guardedNav = (e: React.MouseEvent, href: string) => {
     if (onOpenChange) {

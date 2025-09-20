@@ -920,6 +920,11 @@ function BoardContent() {
     }
   }, [isOnline, flushQueuedMoves, flushOfflineQueueIfAny]);
 
+  // Memoize the navigator open change callback to prevent unnecessary re-renders
+  const handleNavigatorOpenChange = useCallback((open: boolean) => {
+    setNavigatorOpen(open);
+  }, []);
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -1010,7 +1015,7 @@ function BoardContent() {
       {/* Slide-out navigator - always mounted but controlled by state */}
       <GameNavigator
         open={navigatorOpen}
-        onOpenChange={setNavigatorOpen}
+        onOpenChange={handleNavigatorOpenChange}
         showButton={!isBoardHovered}
         onNewGame={(choice) => {
           if (choice === "local-2v2") {
