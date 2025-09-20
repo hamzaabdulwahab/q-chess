@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   description: "Play chess with advanced game tracking and analysis",
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
+      { url: '/favicon.ico', sizes: '16x16 32x32', type: 'image/x-icon' },
       { url: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
     ],
     apple: [
