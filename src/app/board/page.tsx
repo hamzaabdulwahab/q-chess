@@ -192,7 +192,17 @@ function BoardContent() {
         }
       }
     } catch {}
-  }, []);
+
+    // Force sync any queued moves when page loads to ensure database consistency
+    setTimeout(() => {
+      if (effectiveGameId && Number.isInteger(effectiveGameId)) {
+        console.log("Triggering queued moves sync for game", effectiveGameId);
+        flushQueuedMovesRef.current?.();
+      }
+      console.log("Triggering offline queue sync");
+      flushOfflineQueueRef.current?.();
+    }, 1000);
+  }, [effectiveGameId]);
 
   const loadGameData = useCallback(
     async (
@@ -285,6 +295,14 @@ function BoardContent() {
           const isActive = data.game.status === "active";
           if (isActive) setGameOver(null);
           setError(null);
+
+          // Trigger sync after successful game load to ensure any pending moves are synced
+          setTimeout(() => {
+            if (id && Number.isInteger(id)) {
+              console.log("Triggering post-load sync for game", id);
+              flushQueuedMovesRef.current?.();
+            }
+          }, 500);
         } else {
           // Check if this is an authentication error
           if (response.status === 401) {
