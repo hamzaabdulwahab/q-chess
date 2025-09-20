@@ -581,9 +581,14 @@ function BoardContent() {
 
       // If game ended, persist status/winner to DB
       if (isEnd) {
+        // Determine winner consistent with chess-service logic:
+        // After the move, result.fen / internal chess state has turn set to the side that would move next.
+        // In checkmate, that side is the loser; winner is the opposite.
         const winner =
           result.gameStatus === "checkmate"
-            ? boardOrientation // mover won
+            ? appliedTurn === "white"
+              ? "white" // appliedTurn was the mover; mover delivered mate
+              : "black"
             : ("draw" as unknown as "white" | "black");
         setGameOver({
           winner:
@@ -595,12 +600,11 @@ function BoardContent() {
                 ? "Stalemate"
                 : "Draw",
         });
-        // Persist end state to DB if available
         if (effectiveGameId) {
           const status = result.gameStatus as string;
           const winnerForDb =
             status === "checkmate"
-              ? boardOrientation
+              ? winner
               : status === "draw" || status === "stalemate"
                 ? "draw"
                 : null;

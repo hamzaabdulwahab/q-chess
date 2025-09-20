@@ -27,10 +27,14 @@ interface Game {
   status: string;
   move_count: number;
   current_player: string;
+  fen?: string;
   created_at: Date;
   updated_at: Date;
   winner?: string;
   totalMoves: number;
+  // Derived (client only)
+  derivedWinner?: string;
+  derivedCheckmated?: string;
 }
 
 export default function ArchivePage() {
@@ -109,7 +113,60 @@ function ArchivePageContent() {
       
       const data = await response.json();
       if (response.ok) {
-        setGames(data.games || []);
+        const rawGames: Game[] = data.games || [];
+        // Derive authoritative winner/loser for checkmate cases.
+        const normalized = rawGames.map(g => {
+          if (g.status !== 'checkmate') return { ...g };
+
+          let derivedWinner: string | undefined;
+          let derivedCheckmated: string | undefined;
+
+          // Primary: Trust stored winner if it exists and is valid
+          if (g.winner === 'white' || g.winner === 'black') {
+            derivedWinner = g.winner;
+            derivedCheckmated = g.winner === 'white' ? 'black' : 'white';
+          }
+
+          // Secondary: If no stored winner, use current_player as loser (since it's side to move after checkmate)
+          if (!derivedWinner && (g.current_player === 'white' || g.current_player === 'black')) {
+            derivedCheckmated = g.current_player; // loser
+            derivedWinner = g.current_player === 'white' ? 'black' : 'white';
+          }
+
+          // Tertiary: FEN token cross-check for validation
+          if (g.fen) {
+            try {
+              const parts = g.fen.split(' ');
+              const turnToken = parts[1];
+              const fenLoser = turnToken === 'w' ? 'white' : 'black';
+              const fenWinner = fenLoser === 'white' ? 'black' : 'white';
+              
+              // Only override if we have no other derivation, or for debugging mismatch
+              if (!derivedWinner) {
+                derivedWinner = fenWinner;
+                derivedCheckmated = fenLoser;
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          }
+
+          // Quaternary fallback: move_count parity (odd move_count => white just moved, so winner white)
+          if (!derivedWinner && typeof g.move_count === 'number') {
+            const lastMover = g.move_count % 2 === 1 ? 'white' : 'black';
+            derivedWinner = lastMover;
+            derivedCheckmated = lastMover === 'white' ? 'black' : 'white';
+          }
+
+          // If still no derived winner, fallback to stored field
+          if (!derivedWinner && (g.winner === 'white' || g.winner === 'black')) {
+            derivedWinner = g.winner;
+            derivedCheckmated = g.winner === 'white' ? 'black' : 'white';
+          }
+
+          return { ...g, derivedWinner, derivedCheckmated };
+        });
+        setGames(normalized);
       } else {
         setError(data.error || "Failed to fetch games");
       }
@@ -302,10 +359,29 @@ function ArchivePageContent() {
                     <span>Moves:</span>
                     <span>{game.totalMoves}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Current turn:</span>
-                    <span className="capitalize">{game.current_player}</span>
-                  </div>
+                            {game.status === 'checkmate' ? (
+                              (() => {
+                                const winner = game.derivedWinner || game.winner;
+                                const loser = game.derivedCheckmated || (winner === 'white' ? 'black' : 'white');
+                                return (
+                                  <>
+                                    <div className="flex justify-between">
+                                      <span>Winner:</span>
+                                      <span className="capitalize font-medium text-yellow-400">{winner}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>Checkmated:</span>
+                                      <span className="capitalize text-red-300">{loser}</span>
+                                    </div>
+                                  </>
+                                );
+                              })()
+                            ) : (
+                              <div className="flex justify-between">
+                                <span>Current turn:</span>
+                                <span className="capitalize">{game.current_player}</span>
+                              </div>
+                            )}
                   <div className="flex justify-between">
                     <span>Created:</span>
                     <span>{formatDate(game.created_at)}</span>
@@ -314,12 +390,10 @@ function ArchivePageContent() {
                     <span>Last played:</span>
                     <span>{formatDate(game.updated_at)}</span>
                   </div>
-                  {game.winner && (
+                            {game.winner && game.status !== 'checkmate' && !game.derivedWinner && (
                     <div className="flex justify-between">
                       <span>Winner:</span>
-                      <span className="capitalize font-medium text-yellow-400">
-                        {game.winner}
-                      </span>
+                      <span className="capitalize font-medium text-yellow-400">{game.winner}</span>
                     </div>
                   )}
                 </div>

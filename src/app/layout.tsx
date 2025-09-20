@@ -31,6 +31,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Q-Chess - Chess Game",
   description: "Play chess with advanced game tracking and analysis",
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
+      { url: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.svg', sizes: '180x180', type: 'image/svg+xml' },
+    ],
+    shortcut: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

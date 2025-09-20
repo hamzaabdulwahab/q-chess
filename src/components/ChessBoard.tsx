@@ -341,8 +341,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
       winner: status.isCheckmate
         ? status.turn === "white"
-          ? "black"
-          : "white"
+          ? "white"
+          : "black"
         : status.isStalemate || status.isDraw
           ? "draw"
           : null,
@@ -411,8 +411,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
             winner: status.isCheckmate
               ? status.turn === "white"
-                ? "black"
-                : "white"
+                ? "white"
+                : "black"
               : status.isStalemate || status.isDraw
                 ? "draw"
                 : null,
@@ -485,8 +485,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
                   winner: s.isCheckmate
                     ? s.turn === "white"
-                      ? "black"
-                      : "white"
+                      ? "white"
+                      : "black"
                     : s.isStalemate || s.isDraw
                       ? "draw"
                       : null,
@@ -616,8 +616,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
             winner: status.isCheckmate
               ? status.turn === "white"
-                ? "black" // If white is in checkmate, black wins
-                : "white" // If black is in checkmate, white wins
+                ? "white" // If it's white's turn and checkmate, white wins
+                : "black" // If it's black's turn and checkmate, black wins
               : status.isStalemate || status.isDraw
                 ? "draw"
                 : null,

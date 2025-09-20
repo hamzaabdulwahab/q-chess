@@ -251,6 +251,7 @@ export class ChessService {
         status,
         current_player,
         winner,
+        fen,
         move_count,
         created_at,
         updated_at
@@ -413,7 +414,9 @@ export class ChessService {
 
       if (this.chess.isCheckmate()) {
         gameStatus = "checkmate";
-        winner = player; // The player who just moved wins
+        // IMPORTANT: `player` is the side that JUST MOVED (the delivering side). chess.turn() is now the side that would move next (the mated side).
+        // Winner must therefore be `player` (the mover). We keep current_player below as chess.turn() which equals the loser after mate.
+        winner = player;
       } else if (this.chess.isStalemate()) {
         gameStatus = "stalemate";
         winner = "draw";
@@ -446,15 +449,17 @@ export class ChessService {
       });
 
       // Update game state
+  const nextTurnColor = this.chess.turn() === "w" ? "white" : "black"; // For checkmate: loser; for active: side to move
       await supabase
         .from("games")
         .update({
           fen: fenAfter,
           pgn,
-          current_player: this.chess.turn() === "w" ? "white" : "black",
+          current_player: nextTurnColor, // For active games: side to move; for checkmate this is the *loser*
           status: gameStatus,
           winner,
           move_count: historyLength + 1,
+          // If you later add a dedicated column, also store checkmated_player: nextTurnColor when gameStatus === 'checkmate'
         })
         .eq("id", gameId);
 
@@ -494,19 +499,21 @@ export class ChessService {
     isGameOver: boolean;
     winner?: "white" | "black" | "draw";
   } {
+    // If checkmate, side to move (turn()) is the LOSER; winner is the opposite color
+    let winner: "white" | "black" | "draw" | undefined;
+    if (this.chess.isCheckmate()) {
+      const loser = this.chess.turn() === 'w' ? 'white' : 'black';
+      winner = loser === 'white' ? 'black' : 'white';
+    } else if (this.chess.isDraw() || this.chess.isStalemate()) {
+      winner = 'draw';
+    }
     return {
       isCheck: this.chess.isCheck(),
       isCheckmate: this.chess.isCheckmate(),
       isStalemate: this.chess.isStalemate(),
       isDraw: this.chess.isDraw(),
       isGameOver: this.chess.isGameOver(),
-      winner: this.chess.isCheckmate()
-        ? this.chess.turn() === "w"
-          ? "black"
-          : "white"
-        : this.chess.isDraw() || this.chess.isStalemate()
-        ? "draw"
-        : undefined,
+      winner,
     };
   }
 
