@@ -37,20 +37,20 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
   const [imageError, setImageError] = useState(false);
   
   // Map pieces to image filenames (PNG assets in public/pieces)
-  // Inverted as requested: white pieces render black images and black pieces render white images
+  // Normal mapping: white pieces render white images and black pieces render black images
   const pieceImages: { [key: string]: string } = {
-    wK: "black-king.png",
-    wQ: "black-queen.png",
-    wR: "black-rook.png",
-    wB: "black-bishop.png",
-    wN: "black-knight.png",
-    wP: "black-pawn.png",
-    bK: "white-king.png",
-    bQ: "white-queen.png",
-    bR: "white-rook.png",
-    bB: "white-bishop.png",
-    bN: "white-knight.png",
-    bP: "white-pawn.png",
+    wK: "white-king.png",
+    wQ: "white-queen.png",
+    wR: "white-rook.png",
+    wB: "white-bishop.png",
+    wN: "white-knight.png",
+    wP: "white-pawn.png",
+    bK: "black-king.png",
+    bQ: "black-queen.png",
+    bR: "black-rook.png",
+    bB: "black-bishop.png",
+    bN: "black-knight.png",
+    bP: "black-pawn.png",
   };
   
   const pieceSymbols: { [key: string]: string } = {
