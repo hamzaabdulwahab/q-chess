@@ -10,6 +10,8 @@ export function ThemeSelector() {
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, direction: 'up' });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const selectedThemeRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
   useEffect(() => {
     if (isOpen && buttonRef.current && dropdownRef.current) {
@@ -35,8 +37,33 @@ export function ThemeSelector() {
         left,
         direction: showAbove ? 'up' : 'down'
       });
+
+      // Scroll to the selected theme after a short delay to ensure the dropdown is rendered
+      setTimeout(() => {
+        const selectedThemeButton = selectedThemeRefs.current[currentTheme.id];
+        const scrollContainer = scrollContainerRef.current;
+        
+        if (selectedThemeButton && scrollContainer) {
+          // Get the position of the selected theme relative to the scroll container
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const buttonRect = selectedThemeButton.getBoundingClientRect();
+          
+          // Calculate the offset needed to center the selected theme in view
+          const buttonTop = buttonRect.top - containerRect.top;
+          const containerHeight = scrollContainer.clientHeight;
+          const buttonHeight = selectedThemeButton.offsetHeight;
+          
+          // Scroll to position the selected theme near the center of the visible area
+          const scrollTop = buttonTop - (containerHeight / 2) + (buttonHeight / 2);
+          
+          scrollContainer.scrollTo({
+            top: scrollTop,
+            behavior: 'smooth'
+          });
+        }
+      }, 10);
     }
-  }, [isOpen]);
+  }, [isOpen, currentTheme.id]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -100,10 +127,13 @@ export function ThemeSelector() {
               <h3 className="text-white font-medium text-sm">Board Themes</h3>
             </div>
             
-            <div className="max-h-64 overflow-y-auto">
+            <div className="max-h-64 overflow-y-auto" ref={scrollContainerRef}>
               {themes.map((theme) => (
                 <button
                   key={theme.id}
+                  ref={(el) => {
+                    selectedThemeRefs.current[theme.id] = el;
+                  }}
                   onClick={() => {
                     setTheme(theme.id);
                     setIsOpen(false);
