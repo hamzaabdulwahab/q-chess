@@ -425,52 +425,43 @@ export class ChessService {
         winner = "draw";
       }
 
-      // Record the move and update game in Supabase
-      const supabase = ChessService.getClient();
+      // Record the move and update game in Supabase using atomic RPC
       const isCastling = this.isCastlingMove(from, to);
       const isEnPassant = this.isEnPassantMove(from, to);
       const isPromotion = this.isPromotionMove(from, to);
 
-      // Insert move
-      const { error: moveError } = await supabase.from("moves").insert({
-        game_id: gameId,
-        move_number: moveNumber,
-        player,
-        move_notation: move.san,
-        fen_before: fenBefore,
-        fen_after: fenAfter,
-        pgn,
-        captured_piece: capturedPiece,
-        is_check: this.chess.isCheck(),
-        is_checkmate: this.chess.isCheckmate(),
-        is_castling: isCastling,
-        is_en_passant: isEnPassant,
-        is_promotion: isPromotion,
+      // Update game state via atomic RPC to reduce latency and race conditions
+      const nextTurnColor = this.chess.turn() === "w" ? "white" : "black";
+      const rpcClient = getSupabaseServer();
+      const { data: rpcResult, error: rpcError } = await rpcClient.rpc("record_move", {
+        p_game_id: gameId,
+        p_move_number: moveNumber,
+        p_player: player,
+        p_move_notation: move.san,
+        p_fen_before: fenBefore,
+        p_fen_after: fenAfter,
+        p_pgn: pgn,
+        p_captured_piece: capturedPiece,
+        p_is_check: this.chess.isCheck(),
+        p_is_checkmate: this.chess.isCheckmate(),
+        p_is_castling: isCastling,
+        p_is_en_passant: isEnPassant,
+        p_is_promotion: isPromotion,
+        p_current_player: nextTurnColor,
+        p_status: gameStatus,
+        p_winner: winner ?? null,
+        // Remove p_expected_ply to avoid race condition issues
       });
 
-      if (moveError) {
-        console.error("Failed to insert move:", moveError);
-        throw new Error(`Database error inserting move: ${moveError.message}`);
+      if (rpcError) {
+        console.error("Failed to record move atomically:", rpcError);
+        throw new Error(`Database error recording move: ${rpcError.message}`);
       }
 
-      // Update game state
-      const nextTurnColor = this.chess.turn() === "w" ? "white" : "black"; // For checkmate: loser; for active: side to move
-      const { error: gameError } = await supabase
-        .from("games")
-        .update({
-          fen: fenAfter,
-          pgn,
-          current_player: nextTurnColor, // For active games: side to move; for checkmate this is the *loser*
-          status: gameStatus,
-          winner,
-          move_count: historyLength + 1,
-          // If you later add a dedicated column, also store checkmated_player: nextTurnColor when gameStatus === 'checkmate'
-        })
-        .eq("id", gameId);
-
-      if (gameError) {
-        console.error("Failed to update game state:", gameError);
-        throw new Error(`Database error updating game: ${gameError.message}`);
+      // Check if the RPC function returned an error
+      if (rpcResult && !rpcResult.success) {
+        console.error("Move rejected by database:", rpcResult.error);
+        throw new Error(rpcResult.error || "Move rejected by database");
       }
 
       return {

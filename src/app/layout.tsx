@@ -29,7 +29,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Q-Chess - Chess Game",
+  title: "Q-Chess",
   description: "Play chess with advanced game tracking and analysis",
   icons: {
     icon: [

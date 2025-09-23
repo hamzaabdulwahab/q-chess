@@ -392,7 +392,93 @@ end;
 $$;
 
 ------------------------------------------------------------
--- 8. VERIFICATION (Run manually as needed)
+-- 8. ATOMIC MOVE RECORDING FUNCTION
+------------------------------------------------------------
+-- Drop existing function first to handle return type changes
+drop function if exists public.record_move(bigint, int, text, text, text, text, text, text, boolean, boolean, boolean, boolean, boolean, text, text, text, int);
+
+create or replace function public.record_move(
+  p_game_id bigint,
+  p_move_number int,
+  p_player text,
+  p_move_notation text,
+  p_fen_before text,
+  p_fen_after text,
+  p_pgn text,
+  p_captured_piece text default null,
+  p_is_check boolean default false,
+  p_is_checkmate boolean default false,
+  p_is_castling boolean default false,
+  p_is_en_passant boolean default false,
+  p_is_promotion boolean default false,
+  p_current_player text default 'white',
+  p_status text default 'active',
+  p_winner text default null,
+  p_expected_ply int default null
+)
+returns json
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid;
+  v_current_move_count int;
+  v_result json;
+begin
+  -- Get the authenticated user
+  v_user_id := auth.uid();
+  if v_user_id is null then
+    return json_build_object('success', false, 'error', 'Not authenticated');
+  end if;
+
+  -- Start transaction and lock the game for update
+  perform pg_advisory_xact_lock(p_game_id);
+  
+  -- Verify game ownership and get current state
+  select move_count into v_current_move_count
+  from public.games 
+  where id = p_game_id and user_id = v_user_id;
+  
+  if not found then
+    return json_build_object('success', false, 'error', 'Game not found or access denied');
+  end if;
+  
+  -- Insert the move (using database's current move_count + 1 as the move_number)
+  insert into public.moves (
+    game_id, move_number, player, move_notation, fen_before, fen_after, pgn,
+    captured_piece, is_check, is_checkmate, is_castling, is_en_passant, is_promotion
+  ) values (
+    p_game_id, v_current_move_count + 1, p_player, p_move_notation, p_fen_before, p_fen_after, p_pgn,
+    p_captured_piece, p_is_check, p_is_checkmate, p_is_castling, p_is_en_passant, p_is_promotion
+  );
+
+  -- Update the game state
+  update public.games 
+  set 
+    fen = p_fen_after,
+    pgn = p_pgn,
+    current_player = p_current_player,
+    status = p_status,
+    winner = p_winner,
+    move_count = v_current_move_count + 1, -- Increment from current count
+    updated_at = timezone('utc', now())
+  where id = p_game_id and user_id = v_user_id;
+
+  -- Return success
+  return json_build_object('success', true);
+  
+exception
+  when others then
+    return json_build_object('success', false, 'error', SQLERRM);
+end;
+$$;
+
+-- Grant execute permission to authenticated users
+grant execute on function public.record_move(bigint, int, text, text, text, text, text, text, boolean, boolean, boolean, boolean, boolean, text, text, text, int) to authenticated;
+
+------------------------------------------------------------
+-- 9. VERIFICATION (Run manually as needed)
 ------------------------------------------------------------
 -- select * from public.profiles limit 1;
 -- select * from public.games limit 1;

@@ -367,203 +367,178 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const makeMove = useCallback(
     async (from: string, to: string, promotion?: string) => {
       if (gameId) {
-        // Optimistic UI: validate and apply locally first, then persist to server in background
-        try {
-          // Basic legality check to prevent obvious invalid moves
-          const legal = chessService.isMoveLegal(from, to, promotion);
-          if (!legal) {
-            soundManager.play("illegal-move");
-            return { success: false, error: "Invalid move" };
-          }
+        // First validate the move locally to prevent obvious errors
+        const legal = chessService.isMoveLegal(from, to, promotion);
+        if (!legal) {
+          soundManager.play("illegal-move");
+          return { success: false, error: "Invalid move" };
+        }
 
-          const prevFen = chessService.getFen();
-          const prevPly = chessService.getHistory().length; // half-moves so far
-          const expectedPly = prevPly + 1;
-          const clientMoveId = `${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2, 10)}`;
-          const moveDetails = chessService.getMoveDetails(from, to, promotion);
-          const local = chessService.makeMove(from, to, promotion);
-          if (!local.success) {
-            soundManager.play("illegal-move");
-            return { success: false, error: local.error || "Invalid move" };
-          }
+        const prevFen = chessService.getFen();
+        const moveDetails = chessService.getMoveDetails(from, to, promotion);
 
-          const status = chessService.getGameStatus();
-          const moveData = {
-            isCapture: Boolean(local.capturedPiece),
-            isCastle: Boolean(
-              moveDetails?.flags.includes("k") ||
-                moveDetails?.flags.includes("q"),
-            ),
-            isPromotion: Boolean(promotion || moveDetails?.flags.includes("p")),
-            isCheck: status.isInCheck && !status.isCheckmate,
-            isCheckmate: status.isCheckmate,
-            isIllegal: false,
-          };
-          soundManager.playMoveSound(moveData);
+        // Apply optimistic update
+        const local = chessService.makeMove(from, to, promotion);
+        if (!local.success) {
+          soundManager.play("illegal-move");
+          return { success: false, error: local.error || "Invalid move" };
+        }
 
-          // Immediate UI update
-          setGameState({
-            fen: chessService.getFen(),
-            turn: chessService.getCurrentTurn(),
-            inCheck: status.isInCheck && !status.isCheckmate,
-            gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
-            winner: status.isCheckmate
-              ? status.turn === "white"
-                ? "black"
-                : "white"
-              : status.isStalemate || status.isDraw
+        // Play move sound
+        const status = chessService.getGameStatus();
+        const moveData = {
+          isCapture: Boolean(local.capturedPiece),
+          isCastle: Boolean(
+            moveDetails?.flags.includes("k") ||
+              moveDetails?.flags.includes("q"),
+          ),
+          isPromotion: Boolean(promotion || moveDetails?.flags.includes("p")),
+          isCheck: status.isInCheck && !status.isCheckmate,
+          isCheckmate: status.isCheckmate,
+          isIllegal: false,
+        };
+        soundManager.playMoveSound(moveData);
+
+        // Update UI immediately
+        const gameStatus: "active" | "checkmate" | "stalemate" | "draw" =
+          status.isCheckmate
+            ? "checkmate"
+            : status.isStalemate
+              ? "stalemate"
+              : status.isDraw
                 ? "draw"
-                : null,
-            skipEndScreen: false,
-          });
-          setLastMove({ from, to });
-          // Provide gameStatus in optimistic callback so parent can freeze clocks instantly
-          const gameStatus: "active" | "checkmate" | "stalemate" | "draw" =
-            status.isCheckmate
-              ? "checkmate"
-              : status.isStalemate
-                ? "stalemate"
-                : status.isDraw
-                  ? "draw"
-                  : "active";
-          onMove?.({
-            success: true,
-            fen: chessService.getFen(),
-            gameStatus,
-            from,
-            to,
-            promotion,
-          });
+                : "active";
 
-          // Persist to server - no more complex queuing, fail cleanly if offline
-          (async () => {
-            try {
-              const response = await fetch(`/api/games/${gameId}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                cache: "no-store",
-                // Ensure the request isn't canceled on navigation
-                keepalive: true,
-                body: JSON.stringify({
-                  from,
-                  to,
-                  promotion,
-                  // idempotency and conflict detection
-                  clientMoveId,
-                  expectedPly,
-                  prevFen,
-                  san: local.san,
-                }),
-              });
-              console.log("Move API response:", response.status, response.statusText);
-              const result = await response.json().catch((jsonError) => {
-                console.error("Failed to parse JSON response:", jsonError);
-                return null;
-              });
-              console.log("Move API result:", result);
-              
-              if (response.ok && result && result.success) {
-                // Only update if the server FEN is different from our current optimistic state
-                const currentFen = chessService.getFen();
-                if (result.fen !== currentFen) {
-                  const newChessService = new ChessClient(result.fen);
-                  setChessService(newChessService);
-                  const s = newChessService.getGameStatus();
-                  setGameState({
-                    fen: result.fen,
-                    turn: newChessService.getCurrentTurn(),
-                    inCheck: s.isInCheck && result.gameStatus === "active",
-                    gameOver: result.gameStatus !== "active",
-                    winner: result.winner,
-                    skipEndScreen: false,
-                  });
-                }
-                // Success - move persisted correctly
-              } else if (response.ok && result && result.success === false) {
-                // Server asserts move is illegal -> revert
-                console.warn("Server rejected move, reverting");
-                soundManager.play("illegal-move");
-                const revert = new ChessClient(prevFen);
-                setChessService(revert);
-                const s = revert.getGameStatus();
+        setGameState({
+          fen: chessService.getFen(),
+          turn: chessService.getCurrentTurn(),
+          inCheck: status.isInCheck && !status.isCheckmate,
+          gameOver: status.isCheckmate || status.isStalemate || status.isDraw,
+          winner: status.isCheckmate
+            ? status.turn === "white"
+              ? "black"
+              : "white"
+            : status.isStalemate || status.isDraw
+              ? "draw"
+              : null,
+          skipEndScreen: false,
+        });
+        setLastMove({ from, to });
+
+        // Call parent callback immediately with optimistic state
+        onMove?.({
+          success: true,
+          fen: chessService.getFen(),
+          gameStatus,
+          from,
+          to,
+          promotion,
+        });
+
+        // Persist to server in background with retry logic
+        const persistMove = async (retryCount = 0) => {
+          try {
+            console.log(`[Move ${from}-${to}] Attempting to save to server (attempt ${retryCount + 1}/3)`);
+            const response = await fetch(`/api/games/${gameId}/moves`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              cache: "no-store",
+              body: JSON.stringify({ from, to, promotion }),
+            });
+
+            const result = await response.json().catch(() => null);
+            console.log(`[Move ${from}-${to}] Server response:`, { status: response.status, result });
+
+            if (response.ok && result?.success) {
+              // Move saved successfully - check if server state differs
+              if (result.fen && result.fen !== chessService.getFen()) {
+                console.log(`[Move ${from}-${to}] Server state differs, updating to match server`);
+                const serverChessService = new ChessClient(result.fen);
+                setChessService(serverChessService);
+                const serverStatus = serverChessService.getGameStatus();
                 setGameState({
-                  fen: prevFen,
-                  turn: revert.getCurrentTurn(),
-                  inCheck: s.isInCheck && !s.isCheckmate,
-                  gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
-                  winner: s.isCheckmate
-                    ? s.turn === "white"
+                  fen: result.fen,
+                  turn: serverChessService.getCurrentTurn(),
+                  inCheck: serverStatus.isInCheck && result.gameStatus === "active",
+                  gameOver: result.gameStatus !== "active",
+                  winner: result.winner || (serverStatus.isCheckmate
+                    ? serverStatus.turn === "white"
                       ? "black"
                       : "white"
-                    : s.isStalemate || s.isDraw
+                    : serverStatus.isStalemate || serverStatus.isDraw
                       ? "draw"
-                      : null,
+                      : null),
                   skipEndScreen: false,
                 });
               } else {
-                // Server error - revert optimistic state to avoid divergence
-                console.error("Failed to save move to server:", {
-                  status: response.status,
-                  statusText: response.statusText,
-                  result,
-                  gameId,
-                  move: { from, to, promotion }
-                });
-                const revert = new ChessClient(prevFen);
-                setChessService(revert);
-                const s = revert.getGameStatus();
-                setGameState({
-                  fen: prevFen,
-                  turn: revert.getCurrentTurn(),
-                  inCheck: s.isInCheck && !s.isCheckmate,
-                  gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
-                  winner: s.isCheckmate
-                    ? s.turn === "white"
-                      ? "black"
-                      : "white"
-                    : s.isStalemate || s.isDraw
-                      ? "draw"
-                      : null,
-                  skipEndScreen: false,
-                });
-                soundManager.play("illegal-move");
+                console.log(`[Move ${from}-${to}] Move saved successfully, no sync needed`);
               }
-            } catch (error) {
-              // Network error - revert optimistic state, since offline play is disabled
-              console.error("Network error saving move:", {
-                error,
-                gameId,
-                move: { from, to, promotion }
-              });
-              const revert = new ChessClient(prevFen);
-              setChessService(revert);
-              const s = revert.getGameStatus();
+            } else {
+              // Server rejected the move or error occurred
+              console.warn(`[Move ${from}-${to}] Server rejected move, reverting`, { response: response.status, result });
+              
+              // Revert to previous state
+              const revertChessService = new ChessClient(prevFen);
+              setChessService(revertChessService);
+              const revertStatus = revertChessService.getGameStatus();
               setGameState({
                 fen: prevFen,
-                turn: revert.getCurrentTurn(),
-                inCheck: s.isInCheck && !s.isCheckmate,
-                gameOver: s.isCheckmate || s.isStalemate || s.isDraw,
-                winner: s.isCheckmate
-                  ? s.turn === "white"
+                turn: revertChessService.getCurrentTurn(),
+                inCheck: revertStatus.isInCheck && !revertStatus.isCheckmate,
+                gameOver: revertStatus.isCheckmate || revertStatus.isStalemate || revertStatus.isDraw,
+                winner: revertStatus.isCheckmate
+                  ? revertStatus.turn === "white"
                     ? "black"
                     : "white"
-                  : s.isStalemate || s.isDraw
+                  : revertStatus.isStalemate || revertStatus.isDraw
                     ? "draw"
                     : null,
                 skipEndScreen: false,
               });
               soundManager.play("illegal-move");
-            }
-          })();
 
-          // Return immediately for snappy UX
-          return { success: true };
-        } catch {
-          soundManager.play("illegal-move");
-          return { success: false, error: "Unexpected error" };
-        }
+              // Retry on network errors but not on validation errors
+              if (!response.ok && response.status >= 500 && retryCount < 2) {
+                console.log(`[Move ${from}-${to}] Retrying move save (attempt ${retryCount + 2}/3)`);
+                setTimeout(() => persistMove(retryCount + 1), 1000 * (retryCount + 1));
+              }
+            }
+          } catch (error) {
+            console.error(`[Move ${from}-${to}] Network error saving move:`, error);
+            
+            // Only revert if this is the final retry attempt
+            if (retryCount >= 2) {
+              console.warn(`[Move ${from}-${to}] Final retry failed, reverting move`);
+              const revertChessService = new ChessClient(prevFen);
+              setChessService(revertChessService);
+              const revertStatus = revertChessService.getGameStatus();
+              setGameState({
+                fen: prevFen,
+                turn: revertChessService.getCurrentTurn(),
+                inCheck: revertStatus.isInCheck && !revertStatus.isCheckmate,
+                gameOver: revertStatus.isCheckmate || revertStatus.isStalemate || revertStatus.isDraw,
+                winner: revertStatus.isCheckmate
+                  ? revertStatus.turn === "white"
+                    ? "black"
+                    : "white"
+                  : revertStatus.isStalemate || revertStatus.isDraw
+                    ? "draw"
+                    : null,
+                skipEndScreen: false,
+              });
+              soundManager.play("illegal-move");
+            } else {
+              // Retry on network error
+              console.log(`[Move ${from}-${to}] Retrying move save after network error (attempt ${retryCount + 2}/3)`);
+              setTimeout(() => persistMove(retryCount + 1), 1000 * (retryCount + 1));
+            }
+          }
+        };
+
+        // Start the background save process
+        persistMove();
+
+        return { success: true };
       } else {
         // Local game (no gameId)
         const moveDetails = chessService.getMoveDetails(from, to, promotion);
