@@ -127,7 +127,7 @@ export function ThemeSelector() {
               <h3 className="text-white font-medium text-sm">Board Themes</h3>
             </div>
             
-            <div className="max-h-64 overflow-y-auto" ref={scrollContainerRef}>
+            <div className="max-h-64 overflow-y-auto scrollbar-hide" ref={scrollContainerRef}>
               {themes.map((theme) => (
                 <button
                   key={theme.id}
