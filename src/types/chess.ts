@@ -2,9 +2,26 @@ export interface Game {
   id: number;
   fen: string;
   pgn?: string | null;
-  status: "active" | "checkmate" | "stalemate" | "draw" | "resigned";
+  status:
+    | "active"
+    | "checkmate"
+    | "stalemate"
+    | "draw"
+    | "resigned"
+    | "timeout";
   currentPlayer: "white" | "black";
   winner?: "white" | "black" | "draw" | null;
+  userId?: string | null;
+  whiteUserId?: string | null;
+  blackUserId?: string | null;
+  timeControlInitialMs?: number | null;
+  incrementMs?: number;
+  whiteTimeLeftMs?: number | null;
+  blackTimeLeftMs?: number | null;
+  lastMoveAt?: Date | null;
+  startedAt?: Date | null;
+  endedAt?: Date | null;
+  resultReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
   moveCount: number;

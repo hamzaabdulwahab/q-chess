@@ -115,7 +115,13 @@ export async function POST(
     );
 
     // Make the move
-    const result = await chessService.makeMove(gameId, from, to, promotion);
+    const result = await chessService.makeMove(
+      gameId,
+      from,
+      to,
+      promotion,
+      user.id
+    );
 
     if (result.success) {
       return NextResponse.json({

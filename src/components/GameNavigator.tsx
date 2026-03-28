@@ -3,22 +3,25 @@
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { NewGameModal, type NewGameChoice } from "./NewGameModal";
-// Invite-related modals are not used here anymore
+import { type NewGameChoice } from "./NewGameModal";
+import { InviteUserModal } from "@/components/InviteUserModal";
+import { InvitesInboxModal } from "@/components/InvitesInboxModal";
 import { SoundControl } from "@/components/SoundControl";
 import { ThemeSelector } from "@/components/ThemeSelector";
 
 type Props = {
   onNewGame: (choice: NewGameChoice) => void;
+  onStartRemoteGame?: (gameId: number) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   showButton?: boolean;
 };
 
-export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, showButton = true }: Props) {
+export function GameNavigator({ onNewGame, onStartRemoteGame, open: externalOpen, onOpenChange, showButton = true }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [newGameOpen, setNewGameOpen] = useState(false);
+  const [inviteComposerOpen, setInviteComposerOpen] = useState(false);
+  const [invitesInboxOpen, setInvitesInboxOpen] = useState(false);
   
   // Use external open state if provided, otherwise use internal state
   const open = externalOpen !== undefined ? externalOpen : internalOpen;
@@ -42,8 +45,10 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
     }
   }, [open, onOpenChange]);
 
-  // Global keyboard shortcut listener - works regardless of component visibility
+  // Global keyboard shortcut listener (only in uncontrolled mode)
   useEffect(() => {
+    if (externalOpen !== undefined) return;
+
     const handleGlobalKeydown = (ev: KeyboardEvent) => {
       // Handle Cmd+B (Mac) or Ctrl+B (Windows/Linux) to toggle navigator
       if (ev.key === "b" && (ev.metaKey || ev.ctrlKey)) {
@@ -59,7 +64,7 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
     return () => {
       document.removeEventListener("keydown", handleGlobalKeydown);
     };
-  }, [toggleNavigator]); // Now properly depends on the memoized function
+  }, [externalOpen, toggleNavigator]); // Now properly depends on the memoized function
 
   // Close on outside click or Escape (when navigator is open)
   useEffect(() => {
@@ -207,7 +212,7 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
                 } else {
                   setInternalOpen(false);
                 }
-                setNewGameOpen(true);
+                onNewGame("local-2v2");
               }}
               className="w-full btn-accent text-black rounded-lg transition-colors"
               style={{ 
@@ -218,9 +223,48 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
                 borderRadius: '8px'
               }}
             >
-              New Game
+              New Local Game
             </button>
-            {/* Invites entry moved into New Game modal */}
+            <button
+              onClick={() => {
+                if (onOpenChange) {
+                  onOpenChange(false);
+                } else {
+                  setInternalOpen(false);
+                }
+                setInviteComposerOpen(true);
+              }}
+              className="w-full bg-violet-700 hover:bg-violet-600 text-white rounded-lg transition-colors"
+              style={{ 
+                fontFamily: "'Inter', sans-serif",
+                fontWeight: 500,
+                fontSize: '16px',
+                padding: '0.6em 1.2em',
+                borderRadius: '8px'
+              }}
+            >
+              Play by Username
+            </button>
+            <button
+              onClick={() => {
+                if (onOpenChange) {
+                  onOpenChange(false);
+                } else {
+                  setInternalOpen(false);
+                }
+                setInvitesInboxOpen(true);
+              }}
+              className="w-full bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              style={{ 
+                fontFamily: "'Inter', sans-serif",
+                fontWeight: 500,
+                fontSize: '16px',
+                padding: '0.6em 1.2em',
+                borderRadius: '8px'
+              }}
+            >
+              Invites Inbox
+            </button>
             <Link
               href="/"
               onClick={(e) => guardedNav(e, "/")}
@@ -286,14 +330,17 @@ export function GameNavigator({ onNewGame, open: externalOpen, onOpenChange, sho
         />
       )}
 
-      {/* New Game modal */}
-      <NewGameModal
-        open={newGameOpen}
-        onClose={() => setNewGameOpen(false)}
-        onChoose={(choice) => {
-          setNewGameOpen(false);
-          if (!choice) return;
-          onNewGame(choice);
+      <InviteUserModal
+        open={inviteComposerOpen}
+        onClose={() => setInviteComposerOpen(false)}
+      />
+
+      <InvitesInboxModal
+        open={invitesInboxOpen}
+        onClose={() => setInvitesInboxOpen(false)}
+        onStartGame={(acceptedGameId) => {
+          setInvitesInboxOpen(false);
+          onStartRemoteGame?.(acceptedGameId);
         }}
       />
 

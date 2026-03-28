@@ -153,13 +153,23 @@ create table if not exists public.games (
   fen            text not null,
   pgn            text,
   status         text not null default 'active'
-                 check (status in ('active','checkmate','stalemate','draw')),
+                 check (status in ('active','checkmate','stalemate','draw','resigned','timeout')),
   current_player text not null default 'white'
                  check (current_player in ('white','black')),
   winner         text
                  check (winner is null or winner in ('white','black','draw')),
   move_count     int not null default 0,
   user_id        uuid references auth.users(id) on delete cascade,
+  white_user_id  uuid references auth.users(id) on delete set null,
+  black_user_id  uuid references auth.users(id) on delete set null,
+  time_control_initial_ms int,
+  increment_ms   int not null default 0,
+  white_time_left_ms int,
+  black_time_left_ms int,
+  last_move_at   timestamptz,
+  started_at     timestamptz,
+  ended_at       timestamptz,
+  result_reason  text,
   created_at     timestamptz not null default timezone('utc', now()),
   updated_at     timestamptz not null default timezone('utc', now())
 );
@@ -167,6 +177,37 @@ create table if not exists public.games (
 -- Add user_id column if missing (for existing databases)
 alter table public.games
   add column if not exists user_id uuid references auth.users(id) on delete cascade;
+
+alter table public.games
+  add column if not exists white_user_id uuid references auth.users(id) on delete set null,
+  add column if not exists black_user_id uuid references auth.users(id) on delete set null,
+  add column if not exists time_control_initial_ms int,
+  add column if not exists increment_ms int not null default 0,
+  add column if not exists white_time_left_ms int,
+  add column if not exists black_time_left_ms int,
+  add column if not exists last_move_at timestamptz,
+  add column if not exists started_at timestamptz,
+  add column if not exists ended_at timestamptz,
+  add column if not exists result_reason text;
+
+alter table public.games
+  drop constraint if exists games_status_check;
+
+alter table public.games
+  drop constraint if exists games_clock_non_negative;
+
+alter table public.games
+  add constraint games_status_check
+  check (status in ('active','checkmate','stalemate','draw','resigned','timeout'));
+
+alter table public.games
+  add constraint games_clock_non_negative
+  check (
+    (time_control_initial_ms is null or time_control_initial_ms between 60000 and 1800000)
+    and increment_ms between 0 and 30000
+    and (white_time_left_ms is null or white_time_left_ms >= 0)
+    and (black_time_left_ms is null or black_time_left_ms >= 0)
+  );
 
 -- Add updated_at if missing
 alter table public.games
@@ -198,21 +239,40 @@ end;
 $$;
 
 -- User-specific policies for games (users can only see/modify their own games)
-create policy games_select_own
+create policy games_select_participant
   on public.games for select
   to authenticated
-  using (auth.uid() = user_id);
+  using (
+    auth.uid() = user_id
+    or auth.uid() = white_user_id
+    or auth.uid() = black_user_id
+  );
 
 create policy games_insert_own
   on public.games for insert
   to authenticated
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id
+    and (
+      (white_user_id is null and black_user_id is null)
+      or auth.uid() = white_user_id
+      or auth.uid() = black_user_id
+    )
+  );
 
-create policy games_update_own
+create policy games_update_participant
   on public.games for update
   to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using (
+    auth.uid() = user_id
+    or auth.uid() = white_user_id
+    or auth.uid() = black_user_id
+  )
+  with check (
+    auth.uid() = user_id
+    or auth.uid() = white_user_id
+    or auth.uid() = black_user_id
+  );
 
 create policy games_delete_own
   on public.games for delete
@@ -221,6 +281,8 @@ create policy games_delete_own
 
 create index if not exists idx_games_updated_at on public.games(updated_at desc);
 create index if not exists idx_games_user_id on public.games(user_id);
+create index if not exists idx_games_white_user_id on public.games(white_user_id);
+create index if not exists idx_games_black_user_id on public.games(black_user_id);
 
 ------------------------------------------------------------
 -- 5. MOVES
@@ -267,47 +329,63 @@ end;
 $$;
 
 -- User-specific policies for moves (users can only see/modify moves for games they own)
-create policy moves_select_own_game
+create policy moves_select_participant_game
   on public.moves for select
   to authenticated
   using (
     exists (
       select 1 from public.games 
       where games.id = moves.game_id 
-      and games.user_id = auth.uid()
+      and (
+        games.user_id = auth.uid()
+        or games.white_user_id = auth.uid()
+        or games.black_user_id = auth.uid()
+      )
     )
   );
 
-create policy moves_insert_own_game
+create policy moves_insert_participant_game
   on public.moves for insert
   to authenticated
   with check (
     exists (
       select 1 from public.games 
       where games.id = moves.game_id 
-      and games.user_id = auth.uid()
+      and (
+        games.user_id = auth.uid()
+        or games.white_user_id = auth.uid()
+        or games.black_user_id = auth.uid()
+      )
     )
   );
 
-create policy moves_update_own_game
+create policy moves_update_participant_game
   on public.moves for update
   to authenticated
   using (
     exists (
       select 1 from public.games 
       where games.id = moves.game_id 
-      and games.user_id = auth.uid()
+      and (
+        games.user_id = auth.uid()
+        or games.white_user_id = auth.uid()
+        or games.black_user_id = auth.uid()
+      )
     )
   );
 
-create policy moves_delete_own_game
+create policy moves_delete_participant_game
   on public.moves for delete
   to authenticated
   using (
     exists (
       select 1 from public.games 
       where games.id = moves.game_id 
-      and games.user_id = auth.uid()
+      and (
+        games.user_id = auth.uid()
+        or games.white_user_id = auth.uid()
+        or games.black_user_id = auth.uid()
+      )
     )
   );
 
@@ -370,26 +448,81 @@ create policy avatars_user_delete
   );
 
 ------------------------------------------------------------
--- 7. LEGACY CLEANUP (INVITES REMOVAL)
+-- 7. INVITES (MULTIPLAYER)
 ------------------------------------------------------------
--- Actively drop deprecated invite artifacts (table, related view, policies) if they exist.
--- This block is safe (idempotent) and will not error if objects are already gone.
+create table if not exists public.invites (
+  id bigserial primary key,
+  from_user_id uuid not null references auth.users(id) on delete cascade,
+  to_user_id uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'pending'
+    check (status in ('pending','accepted','declined','expired','cancelled')),
+  time_control_initial_ms int not null default 600000
+    check (time_control_initial_ms between 60000 and 1800000),
+  increment_ms int not null default 0
+    check (increment_ms between 0 and 30000),
+  game_id bigint references public.games(id) on delete set null,
+  created_at timestamptz not null default timezone('utc', now()),
+  expires_at timestamptz not null default (timezone('utc', now()) + interval '15 minutes'),
+  responded_at timestamptz,
+  updated_at timestamptz not null default timezone('utc', now()),
+  constraint invites_not_self check (from_user_id <> to_user_id)
+);
+
+alter table public.invites
+  add column if not exists time_control_initial_ms int not null default 600000,
+  add column if not exists increment_ms int not null default 0,
+  add column if not exists game_id bigint references public.games(id) on delete set null,
+  add column if not exists created_at timestamptz not null default timezone('utc', now()),
+  add column if not exists expires_at timestamptz not null default (timezone('utc', now()) + interval '15 minutes'),
+  add column if not exists responded_at timestamptz,
+  add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
+drop trigger if exists trg_invites_updated_at on public.invites;
+create trigger trg_invites_updated_at
+before update on public.invites
+for each row execute function public.set_updated_at();
+
+alter table public.invites enable row level security;
+
 do $$
+declare r record;
 begin
-  -- Drop legacy view (if it was ever created)
-  begin
-    execute 'drop view if exists public.invites_with_usernames cascade';
-  exception when others then
-    null;
-  end;
-  -- Drop invites table (and any dependent policies / triggers / indexes)
-  begin
-    execute 'drop table if exists public.invites cascade';
-  exception when others then
-    null;
-  end;
+  for r in
+    select policyname from pg_policies
+    where schemaname='public' and tablename='invites'
+  loop
+    execute format('drop policy if exists %I on public.invites', r.policyname);
+  end loop;
 end;
 $$;
+
+create policy invites_select_participants
+  on public.invites for select
+  to authenticated
+  using (auth.uid() = from_user_id or auth.uid() = to_user_id);
+
+create policy invites_insert_sender
+  on public.invites for insert
+  to authenticated
+  with check (
+    auth.uid() = from_user_id
+    and auth.uid() <> to_user_id
+    and status = 'pending'
+  );
+
+create policy invites_update_participants
+  on public.invites for update
+  to authenticated
+  using (auth.uid() = from_user_id or auth.uid() = to_user_id)
+  with check (auth.uid() = from_user_id or auth.uid() = to_user_id);
+
+create index if not exists idx_invites_to_user_status_created
+  on public.invites(to_user_id, status, created_at desc);
+create index if not exists idx_invites_from_user_status_created
+  on public.invites(from_user_id, status, created_at desc);
+create unique index if not exists idx_invites_unique_pending_pair
+  on public.invites(least(from_user_id, to_user_id), greatest(from_user_id, to_user_id))
+  where status = 'pending';
 
 ------------------------------------------------------------
 -- 8. ATOMIC MOVE RECORDING FUNCTION
@@ -424,6 +557,12 @@ as $$
 declare
   v_user_id uuid;
   v_current_move_count int;
+  v_owner_user_id uuid;
+  v_white_user_id uuid;
+  v_black_user_id uuid;
+  v_current_player text;
+  v_game_status text;
+  v_actor_color text;
   v_result json;
 begin
   -- Get the authenticated user
@@ -435,13 +574,44 @@ begin
   -- Start transaction and lock the game for update
   perform pg_advisory_xact_lock(p_game_id);
   
-  -- Verify game ownership and get current state
-  select move_count into v_current_move_count
+  -- Verify game access and get current state
+  select move_count, user_id, white_user_id, black_user_id, current_player, status
+  into v_current_move_count, v_owner_user_id, v_white_user_id, v_black_user_id, v_current_player, v_game_status
   from public.games 
-  where id = p_game_id and user_id = v_user_id;
+  where id = p_game_id
+    and (
+      user_id = v_user_id
+      or white_user_id = v_user_id
+      or black_user_id = v_user_id
+    );
   
   if not found then
     return json_build_object('success', false, 'error', 'Game not found or access denied');
+  end if;
+
+  if v_game_status <> 'active' then
+    return json_build_object('success', false, 'error', 'Game is not active');
+  end if;
+
+  -- For multiplayer games, enforce color ownership and turn-taking.
+  if v_white_user_id is not null and v_black_user_id is not null then
+    v_actor_color := case
+      when v_user_id = v_white_user_id then 'white'
+      when v_user_id = v_black_user_id then 'black'
+      else null
+    end;
+
+    if v_actor_color is null then
+      return json_build_object('success', false, 'error', 'Only participants can move in multiplayer games');
+    end if;
+
+    if v_actor_color <> v_current_player then
+      return json_build_object('success', false, 'error', 'It is not your turn');
+    end if;
+
+    if p_player <> v_current_player then
+      return json_build_object('success', false, 'error', 'Move player mismatch');
+    end if;
   end if;
   
   -- Insert the move (using database's current move_count + 1 as the move_number)
@@ -463,7 +633,7 @@ begin
     winner = p_winner,
     move_count = v_current_move_count + 1, -- Increment from current count
     updated_at = timezone('utc', now())
-  where id = p_game_id and user_id = v_user_id;
+  where id = p_game_id;
 
   -- Return success
   return json_build_object('success', true);

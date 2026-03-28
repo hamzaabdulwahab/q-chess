@@ -6,6 +6,7 @@ import React, {
   Suspense,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChessBoard } from "@/components/ChessBoard";
@@ -13,6 +14,7 @@ import { GameNavigator } from "@/components/GameNavigator";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ThemeProvider } from "@/lib/theme-context";
+import { getSupabaseBrowser } from "@/lib/supabase-browser";
 // no NewGameChoice needed
 // useRouter no longer needed after removing online redirect
 // MemeRotator and YouTubeMiniPlayer removed by request
@@ -57,6 +59,11 @@ function BoardContent() {
     moveHistory: [] as string[],
     capturedPieces: { white: [] as string[], black: [] as string[] },
   });
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [participants, setParticipants] = useState<{
+    whiteUserId: string | null;
+    blackUserId: string | null;
+  }>({ whiteUserId: null, blackUserId: null });
 
   // State for access denial dialog
   const [showAccessDialog, setShowAccessDialog] = useState(false);
@@ -85,6 +92,24 @@ function BoardContent() {
       document.removeEventListener("keydown", handleGlobalKeydown);
     };
   }, []); // Empty dependency array - this effect runs once and the listener persists
+
+  useEffect(() => {
+    let mounted = true;
+
+    fetch("/api/profile", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { id?: string | number | null }) => {
+        if (!mounted) return;
+        if (data?.id) {
+          setCurrentUserId(String(data.id));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Effect to handle chess board hover detection
   useEffect(() => {
@@ -118,6 +143,10 @@ function BoardContent() {
     winner: "white" | "black";
     reason: string;
   }>(null);
+  const supabase = useMemo(() => {
+    const sb = getSupabaseBrowser();
+    return sb;
+  }, []);
   // Vs Computer removed
   // no timer hydration needed
   // After an optimistic move, we expect the next turn; use this to ignore stale server snapshots
@@ -163,6 +192,7 @@ function BoardContent() {
       id: number,
       opts?: {
         resetClocks?: boolean; // default true for initial loads
+        isOpponentMove?: boolean; // true if this is a subscription update for opponent's move
       },
     ) => {
       try {
@@ -217,6 +247,11 @@ function BoardContent() {
             moveHistory,
             capturedPieces,
           };
+
+          setParticipants({
+            whiteUserId: (data.game.white_user_id as string | null) ?? null,
+            blackUserId: (data.game.black_user_id as string | null) ?? null,
+          });
 
           // If this reload was triggered right after an optimistic move, ignore stale snapshots
           const wasPostMoveReload = opts?.resetClocks === false;
@@ -427,6 +462,11 @@ function BoardContent() {
             capturedPieces,
           };
 
+          setParticipants({
+            whiteUserId: (data.game.white_user_id as string | null) ?? null,
+            blackUserId: (data.game.black_user_id as string | null) ?? null,
+          });
+
           console.log("Setting game state:", newGameState);
           setGameState(newGameState);
           if (data.game.status === "active") setGameOver(null);
@@ -499,8 +539,25 @@ function BoardContent() {
   }, [gameState.fen]);
 
   // Board orientation: side to move always at bottom unless remote mode locks user color
+  const remoteColorFromParticipants: "white" | "black" | null = React.useMemo(() => {
+    if (!currentUserId) return null;
+    if (participants.whiteUserId === currentUserId) return "white";
+    if (participants.blackUserId === currentUserId) return "black";
+    return null;
+  }, [currentUserId, participants.whiteUserId, participants.blackUserId]);
+
+  const myRemoteColor: "white" | "black" | null =
+    mode === "remote"
+      ? remoteColorFromParticipants ?? youColorParam ?? null
+      : null;
+
   const boardOrientation: "white" | "black" =
-    mode === "remote" && youColorParam ? youColorParam : fenTurn;
+    mode === "remote" && myRemoteColor ? myRemoteColor : fenTurn;
+
+  const remoteTurnLocked =
+    mode === "remote" &&
+    Boolean(effectiveGameId) &&
+    (myRemoteColor ? myRemoteColor !== fenTurn : true);
 
   // Timers removed: no ticking, storage, or timeout logic
 
@@ -645,6 +702,30 @@ function BoardContent() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!effectiveGameId) return;
+
+    const channel = supabase
+      .channel(`game-updates-${effectiveGameId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "games",
+          filter: `id=eq.${effectiveGameId}`,
+        },
+        () => {
+          loadGameData(effectiveGameId, { resetClocks: false });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [effectiveGameId, loadGameData, supabase]);
+
   // REMOVED: Complex offline queue system replaced with simple offline game disabling
   // The game will now be disabled when offline to ensure database consistency
   // No more complex queue management, sync logic, or partial state management
@@ -742,7 +823,12 @@ function BoardContent() {
               gameId={effectiveGameId ?? undefined}
               fen={gameState.fen}
               onMove={handleMove}
-              disabled={gameState.gameStatus !== "active" || Boolean(gameOver) || !isOnline}
+              disabled={
+                gameState.gameStatus !== "active" ||
+                Boolean(gameOver) ||
+                !isOnline ||
+                remoteTurnLocked
+              }
               orientation={boardOrientation}
               turn={fenTurn}
             />
@@ -766,6 +852,15 @@ function BoardContent() {
           if (choice === "local-2v2") {
             resetGame();
           }
+        }}
+        onStartRemoteGame={(acceptedGameId) => {
+          setOverrideGameId(acceptedGameId);
+          window.history.replaceState(
+            {},
+            "",
+            `/board?id=${acceptedGameId}&mode=remote`
+          );
+          loadGame(acceptedGameId);
         }}
       />
 

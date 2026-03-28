@@ -17,6 +17,8 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { Alert } from "@/components/Alert";
 import { NewGameModal, type NewGameChoice } from "@/components/NewGameModal";
+import { InviteUserModal } from "@/components/InviteUserModal";
+import { InvitesInboxModal } from "@/components/InvitesInboxModal";
 import {
   ArchiveFilters,
   type Category,
@@ -48,6 +50,8 @@ function HomeContent() {
   const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [showNewGameModal, setShowNewGameModal] = useState(false);
+  const [inviteComposerOpen, setInviteComposerOpen] = useState(false);
+  const [invitesInboxOpen, setInvitesInboxOpen] = useState(false);
   const [category, setCategory] = useState<Category>("all");
   const [winner, setWinner] = useState<Winner>("all");
   const router = useRouter();
@@ -71,6 +75,48 @@ function HomeContent() {
     };
     check();
   }, []);
+
+  // Listen for invite updates globally to notify sender when invite is accepted
+  useEffect(() => {
+    if (!authed) return;
+
+    const supabase = getSupabaseBrowser();
+    const channel = supabase
+      .channel('invites-global-listener')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invites' },
+        (payload) => {
+          // When an invite is updated, check if it's our outgoing invite that was accepted
+          if (payload.eventType === 'UPDATE') {
+            const updatedInvite = payload.new as {
+              from_user_id?: string;
+              to_user_id?: string;
+              status?: string;
+              game_id?: number | null;
+            };
+
+            // If we're the sender and the invite was accepted with a game ID
+            if (updatedInvite.game_id && updatedInvite.status === 'accepted') {
+              // Check if this invite was from us by fetching our user ID
+              supabase.auth.getUser().then(({ data: { user } }) => {
+                if (user && updatedInvite.from_user_id === user.id) {
+                  setTimeout(() => {
+                    alert(`Your game invite was accepted!\n\nRedirecting to game #${updatedInvite.game_id}...`);
+                    router.push(`/board?id=${updatedInvite.game_id}&mode=remote`);
+                  }, 100);
+                }
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [authed, router]);
 
   const fetchGames = async () => {
     try {
@@ -162,6 +208,10 @@ function HomeContent() {
     if (choice === "local-2v2") {
       // Create a traditional local database game
       await createNewGame();
+    } else if (choice === "invite-user") {
+      setInviteComposerOpen(true);
+    } else if (choice === "invites-inbox") {
+      setInvitesInboxOpen(true);
     }
   };
 
@@ -432,6 +482,20 @@ function HomeContent() {
           open={showNewGameModal}
           onClose={() => setShowNewGameModal(false)}
           onChoose={handleNewGameChoice}
+        />
+
+        <InviteUserModal
+          open={inviteComposerOpen}
+          onClose={() => setInviteComposerOpen(false)}
+        />
+
+        <InvitesInboxModal
+          open={invitesInboxOpen}
+          onClose={() => setInvitesInboxOpen(false)}
+          onStartGame={(acceptedGameId) => {
+            setInvitesInboxOpen(false);
+            router.push(`/board?id=${acceptedGameId}&mode=remote`);
+          }}
         />
       </div>
     </div>
