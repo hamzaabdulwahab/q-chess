@@ -170,7 +170,6 @@ Thumbs.db
 # chess engine binaries (if any)
 *.exe
 *.bin
-stockfish*
 
 # database files (if using local db for development)
 *.db
