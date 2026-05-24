@@ -45,36 +45,3 @@ export function checkBotMoveRateLimit(userId: string): {
   return { ok: true, remaining: max - existing.count };
 }
 
-// Game-analysis is much heavier than a single bot move (one engine
-// search per ply, 80+ for a typical game), so it gets its own,
-// stricter bucket: 10 full-game analyses per hour per user.
-const ANALYZE_WINDOW_MS = 60 * 60_000;
-const ANALYZE_DEFAULT_MAX = 10;
-const analyzeBuckets = new Map<string, Bucket>();
-
-export function checkAnalyzeRateLimit(userId: string): {
-  ok: boolean;
-  remaining: number;
-  retryAfterMs?: number;
-} {
-  const now = Date.now();
-  const max = Math.max(
-    1,
-    Number(process.env.STOCKFISH_ANALYZE_RATE_LIMIT_PER_HOUR) ||
-      ANALYZE_DEFAULT_MAX,
-  );
-  const existing = analyzeBuckets.get(userId);
-  if (!existing || existing.resetAt <= now) {
-    analyzeBuckets.set(userId, { count: 1, resetAt: now + ANALYZE_WINDOW_MS });
-    return { ok: true, remaining: max - 1 };
-  }
-  if (existing.count >= max) {
-    return {
-      ok: false,
-      remaining: 0,
-      retryAfterMs: existing.resetAt - now,
-    };
-  }
-  existing.count += 1;
-  return { ok: true, remaining: max - existing.count };
-}

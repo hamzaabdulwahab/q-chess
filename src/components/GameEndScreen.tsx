@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, RotateCcw, Eye, BarChart3 } from "lucide-react";
+import { Home, RotateCcw, Eye } from "lucide-react";
 
 export type EndStatus =
   | "checkmate"
@@ -180,18 +180,6 @@ export function GameEndScreen({
           className="px-6 pb-6 pt-2 grid grid-cols-2 gap-2"
           style={{ borderTop: "1px solid var(--border)" }}
         >
-          {gameId && (
-            <button
-              type="button"
-              onClick={() =>
-                (window.location.href = `/board/${gameId}/review`)
-              }
-              className="btn-primary col-span-2 inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
-            >
-              <BarChart3 className="h-4 w-4" />
-              Review game
-            </button>
-          )}
           <button
             type="button"
             onClick={() => (window.location.href = "/board")}

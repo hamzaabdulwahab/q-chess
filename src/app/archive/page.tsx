@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
-  BarChart3,
   ChevronRight,
   RefreshCw,
   Search,
@@ -424,16 +423,6 @@ function ArchivePageContent() {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                      {game.status !== "active" && (
-                        <Link
-                          href={`/board/${game.id}/review`}
-                          className="btn-ghost inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs"
-                          title="Open Game Review"
-                        >
-                          <BarChart3 className="h-3 w-3" />
-                          Review
-                        </Link>
-                      )}
                       <Link
                         href={`/board?id=${game.id}`}
                         className="btn-secondary inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs"
