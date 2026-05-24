@@ -184,14 +184,14 @@ interface LevelConfig {
 }
 
 function levelConfig(level: BotLevel): LevelConfig {
-  // Movetimes are configurable via env so an operator can dial things
-  // down on a low-CPU deployment without changing code. Defaults are
-  // tuned to feel snappy on the WASM build while still reaching very
-  // strong play: Stockfish 18 at 1.2s on a single thread typically
-  // searches depth 18 to 22, ~3000+ Elo, comfortably stronger than any
-  // human player.
-  const masterMs = Number(process.env.STOCKFISH_MASTER_MOVETIME_MS) || 900;
-  const monsterMs = Number(process.env.STOCKFISH_MONSTER_MOVETIME_MS) || 1200;
+  // Movetimes are tuned to feel near-instant while keeping every tier
+  // well above human strength. Stockfish 18 on the WASM build searches
+  // depth 12-14 in ~250 ms and depth 16-18 in ~450 ms — at depth 14+
+  // the engine is already ~2500 Elo, which is grandmaster territory.
+  // Spending another second per move adds nothing a human can punish.
+  // Override via env if a deployment needs to dial these up or down.
+  const masterMs = Number(process.env.STOCKFISH_MASTER_MOVETIME_MS) || 350;
+  const monsterMs = Number(process.env.STOCKFISH_MONSTER_MOVETIME_MS) || 450;
 
   switch (level) {
     case "beginner":
@@ -202,7 +202,7 @@ function levelConfig(level: BotLevel): LevelConfig {
           // Skill Level is honoured even when UCI_Elo isn't supported.
           { name: "Skill Level", value: 3 },
         ],
-        movetimeMs: 600,
+        movetimeMs: 200,
       };
     case "intermediate":
       return {
@@ -211,7 +211,7 @@ function levelConfig(level: BotLevel): LevelConfig {
           { name: "UCI_Elo", value: 1500 },
           { name: "Skill Level", value: 8 },
         ],
-        movetimeMs: 800,
+        movetimeMs: 250,
       };
     case "advanced":
       return {
@@ -220,7 +220,7 @@ function levelConfig(level: BotLevel): LevelConfig {
           { name: "UCI_Elo", value: 2000 },
           { name: "Skill Level", value: 15 },
         ],
-        movetimeMs: 1000,
+        movetimeMs: 300,
       };
     case "master":
       return {

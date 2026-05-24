@@ -852,8 +852,10 @@ function BoardContent() {
       return { status: r.status, payload: p };
     };
 
-    // Small delay before kicking off so the user clearly sees their own
-    // move land first.
+    // The 180ms piece slide for the user's own move is already in
+    // flight by the time we get here; a tiny gate (≈ first frame of
+    // the animation) is plenty to keep the moves visually distinct
+    // without making the bot feel sluggish.
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
@@ -949,7 +951,7 @@ function BoardContent() {
           }
         }
       })();
-    }, 250);
+    }, 80);
 
     return () => {
       cancelled = true;
