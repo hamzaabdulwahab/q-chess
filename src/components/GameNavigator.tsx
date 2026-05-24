@@ -8,6 +8,15 @@ import { InviteUserModal } from "@/components/InviteUserModal";
 import { InvitesInboxModal } from "@/components/InvitesInboxModal";
 import { SoundControl } from "@/components/SoundControl";
 import { ThemeSelector } from "@/components/ThemeSelector";
+import { InGameToolbar } from "@/components/InGameToolbar";
+
+export type GameActions = {
+  gameId: number;
+  isActive: boolean;
+  drawOfferFromMe: boolean;
+  drawOfferFromOpponent: boolean;
+  onError: (message: string) => void;
+};
 
 type Props = {
   onNewGame: (choice: NewGameChoice) => void;
@@ -15,9 +24,17 @@ type Props = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   showButton?: boolean;
+  gameActions?: GameActions;
 };
 
-export function GameNavigator({ onNewGame, onStartRemoteGame, open: externalOpen, onOpenChange, showButton = true }: Props) {
+export function GameNavigator({
+  onNewGame,
+  onStartRemoteGame,
+  open: externalOpen,
+  onOpenChange,
+  showButton = true,
+  gameActions,
+}: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [inviteComposerOpen, setInviteComposerOpen] = useState(false);
@@ -120,49 +137,43 @@ export function GameNavigator({ onNewGame, onStartRemoteGame, open: externalOpen
 
   return (
     <>
-      {/* Toggle handle (hamburger) at top-left to mirror user menu; hidden when panel is open */}
+      {/* Toggle handle (hamburger) — top-left, hidden when panel is open. */}
       {!open && showButton && (
         <div className="relative">
           <button
             onClick={() => {
-              if (onOpenChange) {
-                onOpenChange(true);
-              } else {
-                setInternalOpen(true);
-              }
+              if (onOpenChange) onOpenChange(true);
+              else setInternalOpen(true);
             }}
             onMouseEnter={() => setShowTooltip(true)}
             onMouseLeave={() => setShowTooltip(false)}
-            className="fixed top-4 left-4 z-50 w-10 h-10 rounded-full border border-gray-700 text-white grid place-items-center shadow hover:bg-gray-700"
-            style={{ backgroundColor: '#0F0C08' }}
+            className="fixed top-4 left-4 z-50 grid h-10 w-10 place-items-center rounded-md transition-colors"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border-strong)",
+              color: "var(--text)",
+              boxShadow: "var(--shadow)",
+            }}
             aria-expanded={open}
             aria-controls="game-navigator"
-            aria-label="Open navigator"
+            aria-label="Open menu"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="h-5 w-5" />
           </button>
-          
-          {/* Custom Tooltip */}
+
           {showTooltip && (
-            <div 
-              className="fixed z-[60] px-3 py-2 text-white text-sm font-medium rounded-lg shadow-lg pointer-events-none"
-              style={{ 
-                backgroundColor: '#1a1a1a',
-                top: '4rem',
-                left: '1rem',
-                fontSize: '14px',
-                fontFamily: "'Inter', sans-serif"
+            <div
+              className="pointer-events-none fixed z-[60] rounded-md px-2.5 py-1.5 text-xs font-medium"
+              style={{
+                top: "3.75rem",
+                left: "1rem",
+                background: "var(--surface-2)",
+                color: "var(--text)",
+                border: "1px solid var(--border-strong)",
+                boxShadow: "var(--shadow)",
               }}
             >
-              Navigator ({navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+B)
-              <div 
-                className="absolute w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent"
-                style={{ 
-                  borderBottomColor: '#1a1a1a',
-                  top: '-4px',
-                  left: '12px'
-                }}
-              />
+              Menu · {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}+B
             </div>
           )}
         </div>
@@ -172,146 +183,131 @@ export function GameNavigator({ onNewGame, onStartRemoteGame, open: externalOpen
       <div
         id="game-navigator"
         ref={panelRef}
-        className={`fixed top-0 left-0 z-40 h-screen w-64 transform transition-transform duration-200 ease-out border-r border-gray-700 shadow-xl ${
+        className={`fixed top-0 left-0 z-40 h-screen w-72 transform transition-transform duration-200 ease-out ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
-        style={{ backgroundColor: '#0F0C08' }}
+        style={{
+          background: "var(--surface)",
+          borderRight: "1px solid var(--border)",
+          boxShadow: open ? "var(--shadow-lg)" : "none",
+        }}
       >
-        <div className="p-4 pb-2 text-white flex items-center justify-between">
-          <div 
-            className="uppercase tracking-wide text-gray-400"
-            style={{
-              fontFamily: "'Inter', sans-serif",
-              fontWeight: 700,
-              fontSize: '18px'
-            }}
-          >
-            Controls
-          </div>
+        <header className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
+          <span className="text-sm font-semibold tracking-tight">Menu</span>
           <button
+            type="button"
             onClick={() => {
-              if (onOpenChange) {
-                onOpenChange(false);
-              } else {
-                setInternalOpen(false);
-              }
+              if (onOpenChange) onOpenChange(false);
+              else setInternalOpen(false);
             }}
-            className="w-8 h-8 grid place-items-center rounded-md hover:bg-gray-800"
-            aria-label="Close navigator"
+            className="btn-ghost rounded-md p-1.5"
+            aria-label="Close menu"
             title="Close"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
-        </div>
-        <div className="px-4 pb-4 text-white">
-          <div className="space-y-3 mt-2">
-            <button
-              onClick={() => {
-                if (onOpenChange) {
-                  onOpenChange(false);
-                } else {
-                  setInternalOpen(false);
-                }
-                onNewGame("local-2v2");
-              }}
-              className="w-full btn-accent text-black rounded-lg transition-colors"
-              style={{ 
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 500,
-                fontSize: '16px',
-                padding: '0.6em 1.2em',
-                borderRadius: '8px'
-              }}
-            >
-              New Local Game
-            </button>
-            <button
-              onClick={() => {
-                if (onOpenChange) {
-                  onOpenChange(false);
-                } else {
-                  setInternalOpen(false);
-                }
-                setInviteComposerOpen(true);
-              }}
-              className="w-full bg-violet-700 hover:bg-violet-600 text-white rounded-lg transition-colors"
-              style={{ 
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 500,
-                fontSize: '16px',
-                padding: '0.6em 1.2em',
-                borderRadius: '8px'
-              }}
-            >
-              Play by Username
-            </button>
-            <button
-              onClick={() => {
-                if (onOpenChange) {
-                  onOpenChange(false);
-                } else {
-                  setInternalOpen(false);
-                }
-                setInvitesInboxOpen(true);
-              }}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-              style={{ 
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 500,
-                fontSize: '16px',
-                padding: '0.6em 1.2em',
-                borderRadius: '8px'
-              }}
-            >
-              Invites Inbox
-            </button>
-            <Link
-              href="/"
-              onClick={(e) => guardedNav(e, "/")}
-              className="block w-full text-center text-white transition-colors hover:opacity-80"
-              style={{ 
-                backgroundColor: '#1B1B1B',
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 500,
-                fontSize: '16px',
-                padding: '0.6em 1.2em',
-                borderRadius: '8px'
-              }}
-            >
-              Home
-            </Link>
-            <Link
-              href="/archive"
-              onClick={(e) => guardedNav(e, "/archive")}
-              className="block w-full text-center text-white transition-colors hover:opacity-80"
-              style={{ 
-                backgroundColor: '#1B1B1B',
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 500,
-                fontSize: '16px',
-                padding: '0.6em 1.2em',
-                borderRadius: '8px'
-              }}
-              title="Game Archive"
-            >
-              Archive
-            </Link>
+        </header>
 
-            {/* Memes and YouTube toggles removed by request */}
+        <div className="px-5 py-4">
+          {gameActions?.isActive && (
+            <section className="mb-5">
+              <div
+                className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
+                style={{ color: "var(--text-3)" }}
+              >
+                Current game
+              </div>
+              <InGameToolbar
+                gameId={gameActions.gameId}
+                canResign={true}
+                canOfferDraw={!gameActions.drawOfferFromOpponent}
+                drawOfferPendingByMe={gameActions.drawOfferFromMe}
+                onError={gameActions.onError}
+              />
+            </section>
+          )}
 
-            {/* Theme selector */}
-            <div className="block w-full pt-2 border-t border-gray-800">
-              <ThemeSelector />
+          <section>
+            <div
+              className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: "var(--text-3)" }}
+            >
+              Play
             </div>
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenChange) onOpenChange(false);
+                  else setInternalOpen(false);
+                  onNewGame("local-2v2");
+                }}
+                className="btn-accent inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
+              >
+                New local game
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenChange) onOpenChange(false);
+                  else setInternalOpen(false);
+                  setInviteComposerOpen(true);
+                }}
+                className="btn-secondary inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
+              >
+                Challenge by username
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenChange) onOpenChange(false);
+                  else setInternalOpen(false);
+                  setInvitesInboxOpen(true);
+                }}
+                className="btn-secondary inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
+              >
+                Open invitations
+              </button>
+            </div>
+          </section>
 
-            {/* Sound toggle inline */}
-            <div className="block w-full pt-2 border-t border-gray-800">
+          <section className="mt-5">
+            <div
+              className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: "var(--text-3)" }}
+            >
+              Navigate
+            </div>
+            <div className="space-y-1.5">
+              <Link
+                href="/"
+                onClick={(e) => guardedNav(e, "/")}
+                className="btn-ghost block w-full rounded-md px-3 py-2 text-center text-sm"
+              >
+                Lobby
+              </Link>
+              <Link
+                href="/archive"
+                onClick={(e) => guardedNav(e, "/archive")}
+                className="btn-ghost block w-full rounded-md px-3 py-2 text-center text-sm"
+              >
+                Archive
+              </Link>
+            </div>
+          </section>
+
+          <section
+            className="mt-5 pt-4"
+            style={{ borderTop: "1px solid var(--border)" }}
+          >
+            <div className="space-y-3">
+              <ThemeSelector />
               <SoundControl
                 variant="compact"
                 className="w-full justify-center"
               />
             </div>
-          </div>
+          </section>
         </div>
       </div>
 

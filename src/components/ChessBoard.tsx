@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Home, Target, Eye } from "lucide-react";
 import { ChessClient } from "@/lib/chess-client";
 import { soundManager } from "@/lib/sound-manager";
 import { useChessTheme } from "@/lib/theme-context";
+import { GameEndScreen } from "./GameEndScreen";
 
 // Helper functions
 const coordsToSquare = (file: number, rank: number): string => {
@@ -18,15 +18,32 @@ interface ChessBoardProps {
     success: boolean;
     fen: string;
     gameStatus?: string;
+    // SAN of the move just made (e.g. "Nf3", "exd5", "O-O", "Qxh7#").
     move?: string;
     from?: string;
     to?: string;
     promotion?: string;
+    // Flag-style metadata so the parent doesn't need to re-derive these
+    // from the new FEN when shipping the move over Realtime Broadcast.
+    isCapture?: boolean;
+    isCheck?: boolean;
+    isCheckmate?: boolean;
+    isCastling?: boolean;
+    isPromotion?: boolean;
   }) => void;
   disabled?: boolean;
   viewMode?: boolean;
   orientation?: "white" | "black";
   turn?: "white" | "black";
+  // When true, the built-in fullscreen end-game modal is suppressed so the
+  // parent can render its own non-blocking banner and the final board
+  // position stays visible.
+  hideEndScreen?: boolean;
+  // Last move played by something *other* than this component's own click
+  // handler (the bot, or the network opponent). Setting this triggers the
+  // same slide-in animation we already play for the local user's moves so
+  // the player can see what just changed.
+  externalLastMove?: { from: string; to: string } | null;
 }
 
 interface PieceProps {
@@ -140,6 +157,10 @@ interface SquareProps {
   onClick: () => void;
   fileLabel?: string | null;
   rankLabel?: string | null;
+  // When this square is the destination of a move just played, animateFrom
+  // carries the source delta in % units so the piece can slide in from
+  // its prior square. Null when no animation is in flight.
+  animateFrom?: { dx: string; dy: string } | null;
 }
 
 const Square: React.FC<SquareProps> = ({
@@ -153,6 +174,7 @@ const Square: React.FC<SquareProps> = ({
   onClick,
   fileLabel,
   rankLabel,
+  animateFrom,
 }) => {
   const [hovered, setHovered] = useState(false);
   const { currentTheme } = useChessTheme();
@@ -215,7 +237,20 @@ const Square: React.FC<SquareProps> = ({
       style={{ backgroundColor: hovered ? hoverColor : baseColor }}
     >
       {overlayNodes}
-      <div className="square-content w-full h-full flex items-center justify-center relative z-10">
+      <div
+        className={
+          "square-content w-full h-full flex items-center justify-center relative z-10" +
+          (animateFrom ? " piece-animating" : "")
+        }
+        style={
+          animateFrom
+            ? ({
+                "--piece-dx": animateFrom.dx,
+                "--piece-dy": animateFrom.dy,
+              } as React.CSSProperties)
+            : undefined
+        }
+      >
         {piece && <Piece piece={piece} />}
       </div>
       {(fileLabel || rankLabel) && (
@@ -306,6 +341,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   disabled = false,
   viewMode = false,
   orientation = "white",
+  hideEndScreen = false,
+  externalLastMove = null,
 }) => {
   const [chessService, setChessService] = useState<ChessClient>(
     new ChessClient(fen),
@@ -329,8 +366,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   );
   // Nudge removed in favor of true rotation
 
-  // Initialize chess service when fen changes
+  // Initialize chess service when fen changes. Critical: this fires
+  // whenever the `fen` prop changes — *including* when the parent echoes
+  // back the same FEN we just produced from a local makeMove. Without
+  // the guard below we'd rebuild the engine on every move and that
+  // shows up as a one-frame "undo then redo" stutter as React commits
+  // the redundant state. Skip the rebuild when our engine already
+  // reflects the incoming FEN.
   useEffect(() => {
+    if (chessService.getFen() === fen) {
+      return;
+    }
     const newChessService = new ChessClient(fen);
     setChessService(newChessService);
     const status = newChessService.getGameStatus();
@@ -355,6 +401,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     ) {
       soundManager.play("game-start");
     }
+    // chessService is intentionally excluded: the effect replaces it,
+    // and including it would loop forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fen, viewMode]);
 
   // Play game end sounds for draws/stalemates
@@ -363,6 +412,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       soundManager.play("game-end");
     }
   }, [gameState.gameOver, gameState.winner, viewMode]);
+
+  // Mirror externally-driven last move (bot / online opponent) into the
+  // local lastMove state so the same slide-in animation that fires for our
+  // own moves also fires for theirs. Parent only allocates a new object
+  // when an actual new move comes in, so this fires once per move.
+  useEffect(() => {
+    if (!externalLastMove) return;
+    setLastMove({ from: externalLastMove.from, to: externalLastMove.to });
+  }, [externalLastMove]);
 
   const makeMove = useCallback(
     async (from: string, to: string, promotion?: string) => {
@@ -430,15 +488,50 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           success: true,
           fen: chessService.getFen(),
           gameStatus,
+          move: local.san,
           from,
           to,
           promotion,
+          isCapture: moveData.isCapture,
+          isCheck: moveData.isCheck,
+          isCheckmate: moveData.isCheckmate,
+          isCastling: moveData.isCastle,
+          isPromotion: moveData.isPromotion,
         });
 
-        // Persist to server in background with retry logic
+        // Persist to server in the background. On success we keep the
+        // optimistic state. On rejection (or final network failure) we
+        // revert to `prevFen` so the board never silently diverges from
+        // what the server has.
+        const revert = (reason: string) => {
+          if (process.env.NODE_ENV === "development") {
+            console.warn(`[Move ${from}-${to}] reverting: ${reason}`);
+          }
+          const revertChessService = new ChessClient(prevFen);
+          setChessService(revertChessService);
+          const revertStatus = revertChessService.getGameStatus();
+          setGameState({
+            fen: prevFen,
+            turn: revertChessService.getCurrentTurn(),
+            inCheck: revertStatus.isInCheck && !revertStatus.isCheckmate,
+            gameOver:
+              revertStatus.isCheckmate ||
+              revertStatus.isStalemate ||
+              revertStatus.isDraw,
+            winner: revertStatus.isCheckmate
+              ? revertStatus.turn === "white"
+                ? "black"
+                : "white"
+              : revertStatus.isStalemate || revertStatus.isDraw
+                ? "draw"
+                : null,
+            skipEndScreen: false,
+          });
+          soundManager.play("illegal-move");
+        };
+
         const persistMove = async (retryCount = 0) => {
           try {
-            console.log(`[Move ${from}-${to}] Attempting to save to server (attempt ${retryCount + 1}/3)`);
             const response = await fetch(`/api/games/${gameId}/moves`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -447,91 +540,40 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             });
 
             const result = await response.json().catch(() => null);
-            console.log(`[Move ${from}-${to}] Server response:`, { status: response.status, result });
 
             if (response.ok && result?.success) {
-              // Move saved successfully - check if server state differs
-              if (result.fen && result.fen !== chessService.getFen()) {
-                console.log(`[Move ${from}-${to}] Server state differs, updating to match server`);
-                const serverChessService = new ChessClient(result.fen);
-                setChessService(serverChessService);
-                const serverStatus = serverChessService.getGameStatus();
-                setGameState({
-                  fen: result.fen,
-                  turn: serverChessService.getCurrentTurn(),
-                  inCheck: serverStatus.isInCheck && result.gameStatus === "active",
-                  gameOver: result.gameStatus !== "active",
-                  winner: result.winner || (serverStatus.isCheckmate
-                    ? serverStatus.turn === "white"
-                      ? "black"
-                      : "white"
-                    : serverStatus.isStalemate || serverStatus.isDraw
-                      ? "draw"
-                      : null),
-                  skipEndScreen: false,
-                });
-              } else {
-                console.log(`[Move ${from}-${to}] Move saved successfully, no sync needed`);
-              }
-            } else {
-              // Server rejected the move or error occurred
-              console.warn(`[Move ${from}-${to}] Server rejected move, reverting`, { response: response.status, result });
-              
-              // Revert to previous state
-              const revertChessService = new ChessClient(prevFen);
-              setChessService(revertChessService);
-              const revertStatus = revertChessService.getGameStatus();
-              setGameState({
-                fen: prevFen,
-                turn: revertChessService.getCurrentTurn(),
-                inCheck: revertStatus.isInCheck && !revertStatus.isCheckmate,
-                gameOver: revertStatus.isCheckmate || revertStatus.isStalemate || revertStatus.isDraw,
-                winner: revertStatus.isCheckmate
-                  ? revertStatus.turn === "white"
-                    ? "black"
-                    : "white"
-                  : revertStatus.isStalemate || revertStatus.isDraw
-                    ? "draw"
-                    : null,
-                skipEndScreen: false,
-              });
-              soundManager.play("illegal-move");
+              // Move persisted. Trust the optimistic state we already
+              // committed locally — the server's chess.js produces the
+              // same FEN we did, so any byte-level divergence (halfmove
+              // counter, etc.) is cosmetic and would only cause a
+              // redundant setState + render (the original "undo then
+              // redo" stutter). The parent's loadGameData / realtime
+              // refresh is the authoritative reconciliation path.
+              return;
+            }
 
-              // Retry on network errors but not on validation errors
-              if (!response.ok && response.status >= 500 && retryCount < 2) {
-                console.log(`[Move ${from}-${to}] Retrying move save (attempt ${retryCount + 2}/3)`);
-                setTimeout(() => persistMove(retryCount + 1), 1000 * (retryCount + 1));
-              }
+            // Server rejection or transient error.
+            if (!response.ok && response.status >= 500 && retryCount < 2) {
+              setTimeout(
+                () => persistMove(retryCount + 1),
+                1000 * (retryCount + 1),
+              );
+              return;
             }
+            revert(`server ${response.status}`);
           } catch (error) {
-            console.error(`[Move ${from}-${to}] Network error saving move:`, error);
-            
-            // Only revert if this is the final retry attempt
             if (retryCount >= 2) {
-              console.warn(`[Move ${from}-${to}] Final retry failed, reverting move`);
-              const revertChessService = new ChessClient(prevFen);
-              setChessService(revertChessService);
-              const revertStatus = revertChessService.getGameStatus();
-              setGameState({
-                fen: prevFen,
-                turn: revertChessService.getCurrentTurn(),
-                inCheck: revertStatus.isInCheck && !revertStatus.isCheckmate,
-                gameOver: revertStatus.isCheckmate || revertStatus.isStalemate || revertStatus.isDraw,
-                winner: revertStatus.isCheckmate
-                  ? revertStatus.turn === "white"
-                    ? "black"
-                    : "white"
-                  : revertStatus.isStalemate || revertStatus.isDraw
-                    ? "draw"
-                    : null,
-                skipEndScreen: false,
-              });
-              soundManager.play("illegal-move");
-            } else {
-              // Retry on network error
-              console.log(`[Move ${from}-${to}] Retrying move save after network error (attempt ${retryCount + 2}/3)`);
-              setTimeout(() => persistMove(retryCount + 1), 1000 * (retryCount + 1));
+              revert(
+                error instanceof Error
+                  ? `network: ${error.message}`
+                  : "network failure",
+              );
+              return;
             }
+            setTimeout(
+              () => persistMove(retryCount + 1),
+              1000 * (retryCount + 1),
+            );
           }
         };
 
@@ -595,9 +637,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               success: true,
               fen: chessService.getFen(),
               gameStatus,
+              move: result.san,
               from,
               to,
               promotion,
+              isCapture: moveData.isCapture,
+              isCheck: moveData.isCheck,
+              isCheckmate: moveData.isCheckmate,
+              isCastling: moveData.isCastle,
+              isPromotion: moveData.isPromotion,
             });
           }
         } else {
@@ -708,18 +756,47 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     // Get checking pieces if in check
     const checkingPieces = gameState.inCheck ? chessService.getCheckingPieces() : [];
 
+    // For the piece slide animation: compute the delta from the source
+    // square to the destination square in % of a single square. We flip the
+    // sign for the black-orientation case because the parent board is rotated
+    // 180° and the piece image has its own counter-rotation; the keyframe
+    // applied (piece-slide-in-rotated) takes care of the rotation but the
+    // delta we hand it must be expressed in board-local coordinates.
+    let animateTo: string | null = null;
+    let animateOffset: { dx: string; dy: string } | null = null;
+    if (lastMove) {
+      const fromFile = lastMove.from.charCodeAt(0) - 97;
+      const fromRank = parseInt(lastMove.from[1], 10) - 1;
+      const toFile = lastMove.to.charCodeAt(0) - 97;
+      const toRank = parseInt(lastMove.to[1], 10) - 1;
+      // White orientation, DOM coords: positive dx = right, positive dy = down.
+      // Source position relative to destination square center, in board-local
+      // coordinates (before the .board-rotated parent transform applies):
+      //   dx = (sourceFile - targetFile) * 100%
+      //   dy = (targetRank - sourceRank) * 100%   (DOM row N+1 is rank N-1)
+      const sign = isBlackView ? -1 : 1;
+      const dxPct = (fromFile - toFile) * 100 * sign;
+      const dyPct = (toRank - fromRank) * 100 * sign;
+      animateTo = lastMove.to;
+      animateOffset = { dx: `${dxPct}%`, dy: `${dyPct}%` };
+    }
+
     for (const rank of rankRange) {
       for (const file of fileRange) {
         const square = coordsToSquare(file, rank);
         const piece = chessService.getPiece(square);
-        const isLight = (rank + file) % 2 === 0;
+        // Standard chess parity: a1 (file=0, rank=0) is a DARK square,
+        // h1 (file=7, rank=0) is light — "white square on white's right".
+        const isLight = (rank + file) % 2 === 1;
         const isSelected = selectedSquare === square;
-        
+
         // Remove move highlighting functionality - always false
         const isHighlighted = false;
-        
+
         const isLastMove =
           lastMove && (lastMove.from === square || lastMove.to === square);
+        const animateFrom =
+          animateTo === square && animateOffset ? animateOffset : null;
         
         // King is in check
         const isCheck =
@@ -757,6 +834,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             onClick={() => handleSquareClick(square)}
             fileLabel={fileLabel}
             rankLabel={rankLabel}
+            animateFrom={animateFrom}
           />,
         );
       }
@@ -784,128 +862,16 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         <div className="chess-board-large">{renderBoard()}</div>
       </div>
 
-      {/* Status (end screens only). Render only when needed to avoid extra spacing */}
-      {gameState.gameOver && !gameState.skipEndScreen ? (
-        gameState.winner === "draw" ? (
-          <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
-            <div className="bg-gradient-to-br from-violet-950 via-violet-900 to-fuchsia-900 border-4 border-violet-700 rounded-2xl shadow-2xl p-12 max-w-2xl mx-4 text-center">
-              <div className="text-6xl mb-6">🤝</div>
-              <h1 className="text-4xl font-bold text-accent mb-4">
-                HONORABLE DRAW
-              </h1>
-              <div className="w-24 h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 mx-auto mb-4"></div>
-              <p className="text-xl text-violet-100 mb-6">
-                A battle of equals, fought with honor and dignity
-              </p>
-              <div className="text-accent text-lg italic">
-                &quot;In chess, as in life, respect is earned through skillful
-                play&quot;
-              </div>
-              <div className="mt-8 flex gap-4 justify-center flex-wrap">
-                <button
-                  onClick={() => (window.location.href = "/")}
-                  className="btn-accent text-black font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
-                >
-                  <Home className="h-5 w-5" />
-                  <span>Home</span>
-                </button>
-                <button
-                  onClick={() => (window.location.href = "/board")}
-                  className="bg-violet-700 hover:bg-violet-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
-                >
-                  <Target className="h-5 w-5" />
-                  <span>New Game</span>
-                </button>
-                {gameId && (
-                  <button
-                    onClick={() => {
-                      setGameState({ ...gameState, skipEndScreen: true });
-                    }}
-                    className="bg-fuchsia-700 hover:bg-fuchsia-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
-                  >
-                    <Eye className="h-5 w-5" />
-                    <span>View Game</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
-            <div className="bg-gradient-to-br from-violet-950 via-violet-900 to-fuchsia-900 border-4 border-violet-700 rounded-3xl shadow-2xl p-16 max-w-3xl mx-4 text-center relative overflow-hidden">
-              <div className="absolute inset-0 opacity-10">
-                <div className="absolute top-4 left-4 text-6xl text-accent">
-                  ♔
-                </div>
-                <div className="absolute top-4 right-4 text-6xl text-accent">
-                  ♛
-                </div>
-                <div className="absolute bottom-4 left-4 text-6xl text-accent">
-                  ♜
-                </div>
-                <div className="absolute bottom-4 right-4 text-6xl text-accent">
-                  ♝
-                </div>
-              </div>
-              <div className="relative z-10">
-                <div className="text-8xl mb-8 animate-bounce">
-                  {gameState.winner === "white" ? "♔" : "♛"}
-                </div>
-                <h1 className="text-6xl font-bold text-accent mb-6 tracking-wider">
-                  VICTORY ROYAL
-                </h1>
-                <div className="w-32 h-2 bg-gradient-to-r from-violet-500 via-violet-400 to-fuchsia-500 mx-auto mb-6 rounded-full shadow-lg"></div>
-                <div className="text-3xl text-violet-100 mb-6 font-semibold">
-                  {gameState.winner?.charAt(0).toUpperCase()}
-                  {gameState.winner?.slice(1)} Claims the Throne
-                </div>
-                <div className="bg-black bg-opacity-30 rounded-xl p-6 mb-6 border border-violet-700">
-                  <p className="text-xl text-violet-100 italic leading-relaxed">
-                    &quot;In the game of chess, the queen protects the king.
-                    <br />
-                    In the game of life, the king protects the queen.&quot;
-                  </p>
-                </div>
-                <div className="flex justify-center items-center gap-4 text-lg text-accent">
-                  <div className="w-16 h-1 bg-gradient-to-r from-transparent via-violet-500 to-transparent"></div>
-                  <span className="font-semibold tracking-widest">Q-CHESS</span>
-                  <div className="w-16 h-1 bg-gradient-to-r from-transparent via-violet-500 to-transparent"></div>
-                </div>
-                <div className="mt-8 text-accent text-lg">
-                  A masterpiece of strategic brilliance
-                </div>
-                <div className="mt-10 flex gap-4 justify-center flex-wrap">
-                  <button
-                    onClick={() => (window.location.href = "/")}
-                    className="btn-accent text-black font-bold py-3 px-8 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
-                  >
-                    <Home className="h-5 w-5" />
-                    <span>Home</span>
-                  </button>
-                  <button
-                    onClick={() => (window.location.href = "/board")}
-                    className="bg-violet-700 hover:bg-violet-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
-                  >
-                    <Target className="h-5 w-5" />
-                    <span>New Game</span>
-                  </button>
-                  {gameId && (
-                    <button
-                      onClick={() => {
-                        setGameState({ ...gameState, skipEndScreen: true });
-                      }}
-                      className="bg-fuchsia-700 hover:bg-fuchsia-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
-                    >
-                      <Eye className="h-5 w-5" />
-                      <span>View Game</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      ) : null}
+      {/* End-game modal. Suppressed when the parent (board page) renders its
+       * own GameEndScreen driven by server-authoritative status. */}
+      {gameState.gameOver && !gameState.skipEndScreen && !hideEndScreen && (
+        <GameEndScreen
+          status={gameState.winner === "draw" ? "draw" : "checkmate"}
+          winner={gameState.winner as "white" | "black" | "draw" | null}
+          gameId={gameId}
+          onDismiss={() => setGameState({ ...gameState, skipEndScreen: true })}
+        />
+      )}
     </div>
   );
 };

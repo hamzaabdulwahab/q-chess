@@ -464,6 +464,28 @@ export class ChessService {
     }[];
   }
 
+  // Returns the id of any active multiplayer game the given user is a
+  // participant in, or null if none. Used to block scenarios like "send
+  // invite while in another game" and "accept invite while in another game".
+  static async getActiveMultiplayerGameId(
+    userId: string
+  ): Promise<number | null> {
+    const supabase = getSupabaseServer();
+    const { data, error } = await supabase
+      .from("games")
+      .select("id")
+      .eq("status", "active")
+      .not("white_user_id", "is", null)
+      .not("black_user_id", "is", null)
+      .or(`white_user_id.eq.${userId},black_user_id.eq.${userId}`)
+      .limit(1)
+      .maybeSingle();
+    if (error && error.code !== "PGRST116") {
+      throw new Error(error.message);
+    }
+    return data?.id ? (data.id as number) : null;
+  }
+
   static async createInvite(
     fromUserId: string,
     toUsername: string,
@@ -471,6 +493,17 @@ export class ChessService {
   ): Promise<{ id: number; toUserId: string }> {
     const supabase = getSupabaseServer();
     const normalizedUsername = ChessService.normalizeUsername(toUsername);
+
+    // Prevent the "I sent an invite then wandered off into another game"
+    // scenario: if the sender has any active multiplayer game, they must
+    // finish it (or resign) before opening a new challenge.
+    const senderActiveId =
+      await ChessService.getActiveMultiplayerGameId(fromUserId);
+    if (senderActiveId) {
+      throw new Error(
+        `You already have an active game (#${senderActiveId}). Finish or resign it before challenging someone new.`
+      );
+    }
 
     const { data: candidateProfiles, error: profileError } = await supabase
       .from("profiles")
@@ -517,6 +550,17 @@ export class ChessService {
     if (error || !data) {
       if (error?.code === "23505") {
         throw new Error("A pending invite already exists for this user");
+      }
+      // Trigger enforce_outgoing_invite_cap (migration 0003) raises P0001 with
+      // message 'OUTGOING_INVITE_CAP_REACHED' when the sender is at the cap.
+      if (
+        error?.code === "P0001" &&
+        typeof error?.message === "string" &&
+        error.message.includes("OUTGOING_INVITE_CAP_REACHED")
+      ) {
+        throw new Error(
+          "You already have 5 pending outgoing invites. Wait for them to expire or cancel one.",
+        );
       }
       throw new Error(error?.message || "Failed to create invite");
     }
@@ -664,6 +708,26 @@ export class ChessService {
       }
 
       return { inviteId, status: "declined" };
+    }
+
+    // On accept: both parties must be free. If either side has an active
+    // multiplayer game, refuse. This blocks: (a) accepter currently in
+    // another game, (b) sender wandered off into another game between
+    // sending and accept.
+    const accepterActiveId =
+      await ChessService.getActiveMultiplayerGameId(userId);
+    if (accepterActiveId) {
+      throw new Error(
+        `You already have an active game (#${accepterActiveId}). Finish or resign it before accepting a new challenge.`
+      );
+    }
+    const senderActiveId = await ChessService.getActiveMultiplayerGameId(
+      invite.from_user_id as string
+    );
+    if (senderActiveId) {
+      throw new Error(
+        "The challenger is already in another game. They need to finish or resign first."
+      );
     }
 
     const assignWhiteToSender = Math.random() >= 0.5;

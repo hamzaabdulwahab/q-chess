@@ -1,41 +1,75 @@
 @import "tailwindcss";
 
-/* Global color theme */
+/* Design tokens. Pure-neutral dark monochrome — chroma 0 (with a barely
+ * perceptible 0.003 tint to avoid literal #000/#fff). The "accent" is
+ * inverted white-on-black: the primary action button is near-white, text
+ * on it is near-black. Colour appears only where information demands it:
+ * destructive actions (muted red) and time-pressure warnings on the clock
+ * (muted yellow to red gradient). Reference family Inter; system fallback.
+ */
 :root {
-  /* Goth + Dark + Black theme */
-  --background: #0a0a0b;
-  /* near-black base */
-  --background-elev: #111114;
-  /* subtle elevation */
-  --panel: #131317;
-  /* panels/cards */
-  --border: #27272a;
-  /* muted borders */
-  --accent: #a78bfa;
-  /* soft violet accent */
-  --accent-2: #f4f4f5;
-  /* minimal white for highlights */
-  --foreground: #e5e7eb;
-  /* soft light text */
+  --bg:            oklch(0.135 0.003 250);   /* page background */
+  --surface:       oklch(0.17 0.003 250);    /* primary panel */
+  --surface-1:     oklch(0.205 0.003 250);   /* elevated panel / hover */
+  --surface-2:     oklch(0.245 0.003 250);   /* popover / pressed state */
+  --border:        oklch(0.265 0.003 250);   /* subtle separator */
+  --border-strong: oklch(0.345 0.003 250);   /* visible separator */
+
+  --text:          oklch(0.965 0.003 250);   /* primary text */
+  --text-2:        oklch(0.73 0.003 250);    /* secondary text */
+  --text-3:        oklch(0.55 0.003 250);    /* tertiary / meta */
+  --text-4:        oklch(0.42 0.003 250);    /* placeholder / disabled */
+
+  /* Inverted-primary: the action button is near-white, text on it near-black. */
+  --accent:        oklch(0.965 0.003 250);
+  --accent-hover:  oklch(0.99 0.003 250);
+  --accent-press:  oklch(0.88 0.003 250);
+  --accent-fg:     oklch(0.135 0.003 250);
+  --accent-ring:   oklch(0.965 0.003 250 / 0.25);
+  --accent-soft:   oklch(0.965 0.003 250 / 0.08);  /* selected/active tint */
+
+  --success:       oklch(0.66 0.10 150);
+  --success-soft:  oklch(0.66 0.10 150 / 0.14);
+  --danger:        oklch(0.62 0.13 25);
+  --danger-soft:   oklch(0.62 0.13 25 / 0.14);
+  --warning:       oklch(0.78 0.10 85);
+  --warning-soft:  oklch(0.78 0.10 85 / 0.14);
+
+  /* Move-review classification colors. Only used as small accents
+     (icons, pips, badges) on the review surface; the rest of the app
+     stays monochrome. */
+  --cls-brilliant:  oklch(0.78 0.13 200);  /* cyan */
+  --cls-great:      oklch(0.66 0.14 245);  /* blue */
+  --cls-best:       oklch(0.58 0.13 145);  /* dark green */
+  --cls-excellent:  oklch(0.72 0.13 145);  /* light green */
+  --cls-good:       oklch(0.66 0.08 145);  /* muted green */
+  --cls-book:       oklch(0.55 0.07 60);   /* brown */
+  --cls-inaccuracy: oklch(0.80 0.13 95);   /* yellow */
+  --cls-mistake:    oklch(0.70 0.15 50);   /* orange */
+  --cls-blunder:    oklch(0.62 0.18 25);   /* red */
+  --cls-miss:       oklch(0.60 0.16 310);  /* purple */
+
+  --radius-sm: 4px;
+  --radius:    6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.30);
+  --shadow:    0 2px 6px oklch(0 0 0 / 0.40), 0 1px 2px oklch(0 0 0 / 0.30);
+  --shadow-lg: 0 16px 40px oklch(0 0 0 / 0.55), 0 2px 6px oklch(0 0 0 / 0.40);
+
+  --ease:       cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft:  cubic-bezier(0.32, 0.72, 0.36, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0b;
-    --background-elev: #111114;
-    --panel: #131317;
-    --border: #27272a;
-    --accent: #a78bfa;
-    --accent-2: #f4f4f5;
-    --foreground: #e5e7eb;
-  }
-}
-
-/* Base page styling */
 body {
-  background: radial-gradient(1200px 800px at 50% -20%, #15151a 0%, #0a0a0b 55%, #070708 100%);
-  color: var(--foreground);
-  font-family: var(--font-inter), var(--font-poppins), system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11", "cv05";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Typography helpers */
@@ -68,6 +102,26 @@ body {
   scrollbar-width: none;
 }
 
+/* Slim, neutral scrollbar for in-panel lists (e.g. move history). */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}
+
 /* Dropdown typography (profile menu) */
 .dropdown-typography {
   font-family: var(--font-inter), var(--font-poppins), system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
@@ -83,49 +137,186 @@ body {
 .panel,
 .menu,
 .board-wrap {
-  background: var(--panel);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 
-/* Buttons */
-.btn-primary {
-  background: linear-gradient(180deg, var(--accent), #6d5be9);
-  color: #0b0b0e;
-  border: 1px solid #5a4ed6;
+/* Buttons. One vocabulary across the app: primary, secondary, ghost, danger.
+ * Sizing is set by the caller (px-3 py-1.5 = sm, px-4 py-2 = md). */
+.btn-primary,
+.btn-accent {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 1px solid transparent;
+  font-weight: 600;
+  transition:
+    background-color 160ms var(--ease),
+    box-shadow 160ms var(--ease),
+    color 160ms var(--ease);
+}
+.btn-primary:hover:not(:disabled),
+.btn-accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.btn-primary:active:not(:disabled),
+.btn-accent:active:not(:disabled) {
+  background: var(--accent-press);
+}
+.btn-primary:focus-visible,
+.btn-accent:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.btn-primary:disabled,
+.btn-accent:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
+.btn-secondary {
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
+  transition:
+    background-color 160ms var(--ease),
+    border-color 160ms var(--ease),
+    color 160ms var(--ease);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+.btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid transparent;
+  font-weight: 500;
+  transition:
+    background-color 160ms var(--ease),
+    color 160ms var(--ease);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.btn-danger {
+  background: var(--danger-soft);
+  color: var(--text);
+  border: 1px solid color-mix(in oklch, var(--danger) 50%, transparent);
+  font-weight: 500;
+  transition:
+    background-color 160ms var(--ease),
+    border-color 160ms var(--ease);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--danger) 22%, transparent);
+  border-color: var(--danger);
+}
+
+/* Outline button (legacy name; routes to btn-secondary look). */
 .btn-outline {
   background: transparent;
-  color: var(--accent-2);
-  border: 1px solid var(--border);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  transition:
+    background-color 160ms var(--ease),
+    border-color 160ms var(--ease);
+}
+.btn-outline:hover:not(:disabled) {
+  background: var(--surface-1);
+  border-color: var(--border-strong);
 }
 
-/* Accent helpers (goth violet) */
-.btn-accent {
-  background-image: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
-  color: #0b0b0e;
-  border: 1px solid rgba(167, 139, 250, 0.5);
-}
-
-.btn-accent:hover {
-  filter: brightness(0.95);
-}
-
-.link-accent {
-  color: #c4b5fd;
-}
-
-.link-accent:hover {
-  color: #ddd6fe;
-}
-
-.border-accent {
-  border-color: #7c3aed !important;
-}
-
+/* Text and structural helpers */
 .text-accent {
-  color: #c4b5fd !important;
+  color: var(--accent) !important;
+}
+.text-muted {
+  color: var(--text-3);
+}
+.border-accent {
+  border-color: var(--accent) !important;
+}
+.link-accent {
+  color: var(--accent);
+}
+.link-accent:hover {
+  color: var(--accent-hover);
+}
+
+/* Form controls share one look. */
+.input,
+.select {
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  transition:
+    border-color 160ms var(--ease),
+    box-shadow 160ms var(--ease);
+}
+.input::placeholder {
+  color: var(--text-4);
+}
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/* Surface helpers */
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.surface-card-1 {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* Chess-grid backdrop — a faint 8x8 conic pattern that recalls the board
+ * without competing with the foreground. Used on auth pages only. */
+.bg-chessgrid {
+  position: relative;
+  isolation: isolate;
+}
+.bg-chessgrid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 80px 80px, 80px 80px;
+  background-position: -1px -1px;
+  opacity: 0.4;
+  mask-image: radial-gradient(
+    ellipse at center,
+    oklch(0 0 0 / 0.7) 30%,
+    transparent 80%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    oklch(0 0 0 / 0.7) 30%,
+    transparent 80%
+  );
 }
 
 .bg-accent-ghost {
@@ -217,6 +408,33 @@ body {
   transform-origin: center center;
 }
 
+/* When the board sits inside the multiplayer 3-column layout we need to
+ * leave horizontal room for the player panels on either side. Override the
+ * viewport-based sizing so the board never overlaps the panels. The
+ * 30rem reserve covers 2x w-52 panels (208px each) + 2x gap-3 (12px) +
+ * page px-4 padding + a small buffer. */
+@media (min-width: 768px) {
+  .board-area-with-panels .chess-board-large,
+  .board-area-with-panels .board-orient {
+    width: min(80vh, calc(100vw - 30rem));
+    height: min(80vh, calc(100vw - 30rem));
+    max-width: calc(100vw - 30rem);
+    max-height: 80vh;
+  }
+  .board-area-with-panels .chess-piece-image {
+    width: calc(min(80vh, calc(100vw - 30rem)) / 8 * 1.02);
+    height: calc(min(80vh, calc(100vw - 30rem)) / 8 * 1.02);
+    max-width: calc(min(80vh, calc(100vw - 30rem)) / 8 * 1.02);
+    max-height: calc(min(80vh, calc(100vw - 30rem)) / 8 * 1.02);
+  }
+  .board-area-with-panels .chess-square-large {
+    width: calc(min(80vh, calc(100vw - 30rem)) / 8);
+    height: calc(min(80vh, calc(100vw - 30rem)) / 8);
+    max-width: calc(min(80vh, calc(100vw - 30rem)) / 8);
+    max-height: calc(min(80vh, calc(100vw - 30rem)) / 8);
+  }
+}
+
 .board-orient.board-rotated {
   transform: rotate(180deg);
 }
@@ -290,4 +508,45 @@ body {
     0 20px 25px -5px rgba(0, 0, 0, 0.1),
     0 10px 10px -5px rgba(0, 0, 0, 0.04),
     0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* ─── Piece-move animation (chess.com-style slide) ─────────────────────
+ * Applied to the piece image at the destination square right after a move.
+ * The square sets CSS custom properties --piece-dx and --piece-dy, expressed
+ * as percentages of one square, telling the piece where it WAS relative to
+ * its new home. The keyframe animates from that offset back to 0.
+ * Note: when the board is rotated (black orientation), the parent
+ * .board-orient gets transform: rotate(180deg) which composes with the
+ * piece image's own rotate(180deg). Their combined matrix is identity for
+ * pure translations — so the same --piece-dx / --piece-dy values in
+ * screen-equivalent space animate correctly in either orientation, provided
+ * the caller flips the signs for the black orientation case.
+ */
+@keyframes piece-slide-in {
+  from {
+    transform: rotate(0deg) translate(var(--piece-dx, 0), var(--piece-dy, 0));
+  }
+  to {
+    transform: rotate(0deg) translate(0, 0);
+  }
+}
+
+@keyframes piece-slide-in-rotated {
+  from {
+    transform: rotate(180deg) translate(var(--piece-dx, 0), var(--piece-dy, 0));
+  }
+  to {
+    transform: rotate(180deg) translate(0, 0);
+  }
+}
+
+.piece-animating .chess-piece-image,
+.piece-animating .chess-piece-fallback {
+  animation: piece-slide-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform;
+}
+
+.board-orient.board-rotated .piece-animating .chess-piece-image,
+.board-orient.board-rotated .piece-animating .chess-piece-fallback {
+  animation-name: piece-slide-in-rotated;
 }

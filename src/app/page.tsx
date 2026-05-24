@@ -10,6 +10,7 @@ import {
   Handshake,
   Scale,
   HelpCircle,
+  Inbox,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -19,6 +20,9 @@ import { Alert } from "@/components/Alert";
 import { NewGameModal, type NewGameChoice } from "@/components/NewGameModal";
 import { InviteUserModal } from "@/components/InviteUserModal";
 import { InvitesInboxModal } from "@/components/InvitesInboxModal";
+import { BotGameModal } from "@/components/BotGameModal";
+import { LobbyOnlineUsers } from "@/components/LobbyOnlineUsers";
+import type { CurrentUserIdentity } from "@/lib/multiplayer/types";
 import {
   ArchiveFilters,
   type Category,
@@ -34,6 +38,10 @@ interface Game {
   updated_at: Date;
   winner?: string;
   totalMoves: number;
+  white_user_id?: string | null;
+  black_user_id?: string | null;
+  time_control_initial_ms?: number | null;
+  increment_ms?: number;
 }
 
 export default function Home() {
@@ -51,12 +59,36 @@ function HomeContent() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [showNewGameModal, setShowNewGameModal] = useState(false);
   const [inviteComposerOpen, setInviteComposerOpen] = useState(false);
+  const [inviteComposerPrefill, setInviteComposerPrefill] = useState<
+    string | undefined
+  >(undefined);
   const [invitesInboxOpen, setInvitesInboxOpen] = useState(false);
+  const [botGameOpen, setBotGameOpen] = useState(false);
+  const [pendingInvitesCount, setPendingInvitesCount] = useState(0);
+  const [me, setMe] = useState<CurrentUserIdentity | null>(null);
   const [category, setCategory] = useState<Category>("all");
   const [winner, setWinner] = useState<Winner>("all");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const refreshPendingInvitesCount = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/invites?direction=incoming", {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        invites?: { status?: string }[];
+      };
+      const pending = (data.invites ?? []).filter(
+        (inv) => inv.status === "pending",
+      ).length;
+      setPendingInvitesCount(pending);
+    } catch {
+      // Silent — badge just won't update; user can still open the inbox manually.
+    }
+  }, []);
 
   useEffect(() => {
     // Check auth first; if not signed in, send to signin
@@ -72,9 +104,32 @@ function HomeContent() {
       }
       setAuthed(true);
       fetchGames();
+      refreshPendingInvitesCount();
+
+      try {
+        const profileRes = await fetch("/api/profile", { cache: "no-store" });
+        if (profileRes.ok) {
+          const profile = (await profileRes.json()) as {
+            id?: string;
+            username?: string | null;
+            full_name?: string | null;
+            avatar_url?: string | null;
+          };
+          if (profile.id && profile.username) {
+            setMe({
+              id: profile.id,
+              username: profile.username,
+              fullName: profile.full_name ?? null,
+              avatarUrl: profile.avatar_url ?? null,
+            });
+          }
+        }
+      } catch {
+        // Presence stays disabled if profile fetch fails; lobby UI degrades silently.
+      }
     };
     check();
-  }, []);
+  }, [refreshPendingInvitesCount]);
 
   // Listen for invite updates globally to notify sender when invite is accepted
   useEffect(() => {
@@ -87,6 +142,9 @@ function HomeContent() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'invites' },
         (payload) => {
+          // Any invite change (insert/update/delete) potentially affects our badge count.
+          refreshPendingInvitesCount();
+
           // When an invite is updated, check if it's our outgoing invite that was accepted
           if (payload.eventType === 'UPDATE') {
             const updatedInvite = payload.new as {
@@ -101,10 +159,9 @@ function HomeContent() {
               // Check if this invite was from us by fetching our user ID
               supabase.auth.getUser().then(({ data: { user } }) => {
                 if (user && updatedInvite.from_user_id === user.id) {
-                  setTimeout(() => {
-                    alert(`Your game invite was accepted!\n\nRedirecting to game #${updatedInvite.game_id}...`);
-                    router.push(`/board?id=${updatedInvite.game_id}&mode=remote`);
-                  }, 100);
+                  router.push(
+                    `/board?id=${updatedInvite.game_id}&mode=remote`,
+                  );
                 }
               });
             }
@@ -116,7 +173,7 @@ function HomeContent() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authed, router]);
+  }, [authed, router, refreshPendingInvitesCount]);
 
   const fetchGames = async () => {
     try {
@@ -206,12 +263,13 @@ function HomeContent() {
     if (!choice) return;
 
     if (choice === "local-2v2") {
-      // Create a traditional local database game
       await createNewGame();
     } else if (choice === "invite-user") {
       setInviteComposerOpen(true);
     } else if (choice === "invites-inbox") {
       setInvitesInboxOpen(true);
+    } else if (choice === "play-vs-bot") {
+      setBotGameOpen(true);
     }
   };
 
@@ -228,15 +286,19 @@ function HomeContent() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
-        return "text-green-400";
+        return "text-[oklch(0.72_0.13_145)]"; // alive — muted green
       case "checkmate":
-        return "text-red-400";
+        return "text-[var(--accent)]";
       case "draw":
-        return "text-yellow-400";
       case "stalemate":
-        return "text-gray-400";
+        return "text-[var(--text-2)]";
+      case "resigned":
+      case "timeout":
+        return "text-[oklch(0.66_0.14_25)]"; // muted red
+      case "abandoned":
+        return "text-[var(--text-3)]";
       default:
-        return "text-gray-400";
+        return "text-[var(--text-3)]";
     }
   };
 
@@ -284,6 +346,22 @@ function HomeContent() {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [category, winner, pathname, router, searchParams]);
 
+  // Active multiplayer game for the current user, if any. Used to render
+  // the resume-game banner so the user is never stranded after wandering
+  // away from a live game.
+  const activeMultiplayerGame = React.useMemo(() => {
+    if (!me) return null;
+    return (
+      games.find(
+        (g) =>
+          g.status === "active" &&
+          g.white_user_id &&
+          g.black_user_id &&
+          (g.white_user_id === me.id || g.black_user_id === me.id),
+      ) ?? null
+    );
+  }, [games, me]);
+
   const filteredGames = React.useMemo(() => {
     const completedStatuses = new Set(["checkmate", "stalemate", "draw"]);
     return games.filter((g) => {
@@ -309,65 +387,137 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen">
+      <div className="mx-auto w-full max-w-5xl px-4 py-10">
         {/* Header */}
-        <div className="relative text-center mb-12">
-          <div className="relative">
-            <h1 className="text-6xl md:text-7xl font-bold mb-4 bg-gradient-to-r from-violet-300 via-violet-200 to-fuchsia-300 bg-clip-text text-transparent">
-              ♔ Q-Chess ♛
+        <header className="mb-10 flex items-end justify-between gap-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Q-chess
             </h1>
-            <div className="absolute inset-0 text-6xl md:text-7xl font-bold bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-600 bg-clip-text text-transparent blur-sm opacity-30">
-              ♔ Q-Chess ♛
-            </div>
+            <p className="mt-1 text-sm text-muted">
+              {me?.username ? `Signed in as @${me.username}` : "Play chess online"}
+            </p>
           </div>
-          <p className="text-accent text-xl font-medium">
-            Distraction-Free Chess
-          </p>
-          <div className="flex justify-center items-center mt-4 space-x-4">
-            <div className="w-16 h-px bg-gradient-to-r from-transparent via-violet-400 to-transparent"></div>
-            <span className="text-accent text-sm font-semibold">
-              PREMIUM EXPERIENCE
-            </span>
-            <div className="w-16 h-px bg-gradient-to-r from-transparent via-violet-400 to-transparent"></div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setInvitesInboxOpen(true)}
+              className="btn-secondary relative inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+            >
+              <Inbox className="h-4 w-4" />
+              Invitations
+              {pendingInvitesCount > 0 && (
+                <span
+                  className="absolute -top-1.5 -right-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold"
+                  style={{
+                    background: "var(--accent)",
+                    color: "var(--accent-fg)",
+                    boxShadow: "0 0 0 2px var(--bg)",
+                  }}
+                >
+                  {pendingInvitesCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNewGameModal(true)}
+              className="btn-accent inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-sm"
+            >
+              <Play className="h-4 w-4" />
+              New game
+            </button>
           </div>
-        </div>
+        </header>
 
-        {/* New Game Button */}
-        <div className="text-center mb-12">
-          <button
-            onClick={() => setShowNewGameModal(true)}
-            className="btn-accent text-black font-bold py-5 px-10 rounded-xl text-xl transition-all duration-300 transform hover:scale-105 shadow-2xl border border-accent/30"
-          >
-            ♔ Start New Match ♛
-          </button>
-        </div>
-
-        {/* Error Message */}
         {error && (
-          <Alert variant="error" onClose={() => setError(null)}>
-            {error}
-          </Alert>
+          <div className="mb-6">
+            <Alert variant="error" onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          </div>
         )}
 
-        {/* Games List */}
-        <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-violet-300 to-fuchsia-300 bg-clip-text text-transparent">
-              Game Archive
+        {/* Resume game banner — only shown when the user has an active
+            multiplayer game. Catches the case where they navigated away
+            after sending/accepting an invite. */}
+        {activeMultiplayerGame && me && (
+          <div
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md px-4 py-3"
+            style={{
+              background: "var(--accent-soft)",
+              border:
+                "1px solid color-mix(in oklch, var(--accent) 35%, transparent)",
+            }}
+            role="status"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span
+                className="inline-block h-2 w-2 rounded-full"
+                style={{
+                  background: "var(--accent)",
+                  boxShadow: "0 0 8px var(--accent)",
+                }}
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <div
+                  className="text-sm font-semibold truncate"
+                  style={{ color: "var(--text)" }}
+                >
+                  Game in progress
+                </div>
+                <div className="text-xs text-muted">
+                  Your turn{" "}
+                  {activeMultiplayerGame.current_player ===
+                  (activeMultiplayerGame.white_user_id === me.id
+                    ? "white"
+                    : "black")
+                    ? "now"
+                    : `(${activeMultiplayerGame.current_player} to move)`}{" "}
+                  · Game #{activeMultiplayerGame.id}
+                </div>
+              </div>
+            </div>
+            <Link
+              href={`/board?id=${activeMultiplayerGame.id}`}
+              className="btn-accent inline-flex shrink-0 items-center gap-2 rounded-md px-3.5 py-1.5 text-sm"
+            >
+              <Play className="h-3.5 w-3.5" />
+              Resume game
+            </Link>
+          </div>
+        )}
+
+        {/* Lobby — online users */}
+        <LobbyOnlineUsers
+          me={me}
+          onChallenge={(user) => {
+            setInviteComposerPrefill(user.username);
+            setInviteComposerOpen(true);
+          }}
+        />
+
+        {/* Archive */}
+        <section className="mt-10">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-semibold tracking-tight">
+              Recent games
             </h2>
             <button
+              type="button"
               onClick={fetchGames}
-              className="text-accent hover:opacity-90 transition-colors flex items-center gap-2"
+              className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs"
+              aria-label="Refresh games"
             >
-              <RefreshCw className="w-4 h-4" />
-              <span>Refresh</span>
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
             </button>
           </div>
 
-          <div className="sticky top-20 z-30">
+          <div className="mb-4">
             <ArchiveFilters
-              className="mb-6"
               category={category}
               onCategoryChange={setCategory}
               winner={winner}
@@ -378,104 +528,114 @@ function HomeContent() {
           </div>
 
           {games.length === 0 ? (
-            <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-accent/30 rounded-xl p-8 text-center shadow-2xl">
-              <div className="text-7xl mb-4">♔</div>
-              <h3 className="text-2xl font-semibold mb-2 text-accent">
+            <div
+              className="surface-card flex flex-col items-center justify-center px-6 py-14 text-center"
+            >
+              <p className="text-base font-medium" style={{ color: "var(--text)" }}>
                 No games yet
-              </h3>
-              <p className="text-accent mb-6 font-medium">
-                Create your first strategic challenge
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                Challenge someone in the lobby, or start a new game.
               </p>
               <button
+                type="button"
                 onClick={() => setShowNewGameModal(true)}
-                className="btn-accent text-black px-8 py-3 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="btn-accent mt-5 rounded-md px-4 py-2 text-sm"
               >
-                ♔ Create First Match
+                Start a game
               </button>
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {filteredGames.map((game) => (
-                <div
+                <article
                   key={game.id}
-                  className="bg-gradient-to-br from-gray-800 to-gray-900 border border-accent/20 rounded-xl p-6 hover:border-accent transition-all duration-300 transform hover:scale-105 shadow-xl hover:shadow-violet-600/20"
+                  className="surface-card group p-4 transition-colors hover:bg-[var(--surface-1)]"
                 >
-                  <div className="flex justify-between items-start mb-4">
+                  <div className="mb-3 flex items-start justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold mb-1 text-accent">
+                      <div className="text-xs font-medium text-muted">
                         Game #{game.id}
-                      </h3>
-                      <div className="flex items-center space-x-2">
-                        <span>{getStatusIcon(game.status)}</span>
-                        <span
-                          className={`text-sm font-medium ${getStatusColor(
-                            game.status,
-                          )}`}
-                        >
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                        <span className="opacity-80">{getStatusIcon(game.status)}</span>
+                        <span className={getStatusColor(game.status)}>
                           {game.status.charAt(0).toUpperCase() +
                             game.status.slice(1)}
                         </span>
                       </div>
                     </div>
                     <button
+                      type="button"
                       onClick={() => deleteGame(game.id)}
-                      className="text-red-400 hover:text-red-300 transition-colors text-sm hover:scale-110 transform"
+                      className="rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                      style={{ color: "var(--text-3)" }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.color = "oklch(0.7 0.16 25)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.color = "var(--text-3)")
+                      }
                       title="Delete game"
+                      aria-label="Delete game"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
 
-                  <div className="space-y-2 mb-4 text-sm text-gray-400">
-                    <div className="flex justify-between">
-                      <span>Moves:</span>
-                      <span>{game.totalMoves}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Current turn:</span>
-                      <span className="capitalize">{game.current_player}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Created:</span>
-                      <span>{formatDate(game.created_at)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Last played:</span>
-                      <span>{formatDate(game.updated_at)}</span>
-                    </div>
-                    {game.winner && (
-                      <div className="flex justify-between">
-                        <span>Winner:</span>
-                        <span className="capitalize font-medium text-yellow-400">
+                  <dl className="mb-4 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                    <dt className="text-muted">Moves</dt>
+                    <dd className="text-right" style={{ color: "var(--text-2)" }}>
+                      {game.totalMoves}
+                    </dd>
+                    {game.winner ? (
+                      <>
+                        <dt className="text-muted">Winner</dt>
+                        <dd
+                          className="text-right capitalize font-medium"
+                          style={{ color: "var(--accent)" }}
+                        >
                           {game.winner}
-                        </span>
-                      </div>
+                        </dd>
+                      </>
+                    ) : (
+                      <>
+                        <dt className="text-muted">To move</dt>
+                        <dd
+                          className="text-right capitalize"
+                          style={{ color: "var(--text-2)" }}
+                        >
+                          {game.current_player}
+                        </dd>
+                      </>
                     )}
-                  </div>
+                    <dt className="text-muted">Updated</dt>
+                    <dd className="text-right" style={{ color: "var(--text-2)" }}>
+                      {formatDate(game.updated_at)}
+                    </dd>
+                  </dl>
 
-                  <div className="flex space-x-2">
-                    <Link
-                      href={`/board?id=${game.id}`}
-                      className="flex-1 btn-accent text-black text-center py-2 px-4 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                      {game.status === "active" ? (
-                        <>
-                          <Play className="w-4 h-4" />
-                          <span>Resume</span>
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="w-4 h-4" />
-                          <span>View</span>
-                        </>
-                      )}
-                    </Link>
-                  </div>
-                </div>
+                  <Link
+                    href={`/board?id=${game.id}`}
+                    className="btn-secondary inline-flex w-full items-center justify-center gap-1.5 rounded-md py-1.5 px-3 text-sm"
+                  >
+                    {game.status === "active" ? (
+                      <>
+                        <Play className="h-3.5 w-3.5" />
+                        Resume
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-3.5 w-3.5" />
+                        View
+                      </>
+                    )}
+                  </Link>
+                </article>
               ))}
             </div>
           )}
-        </div>
+        </section>
 
         {/* Modals */}
         <NewGameModal
@@ -486,15 +646,32 @@ function HomeContent() {
 
         <InviteUserModal
           open={inviteComposerOpen}
-          onClose={() => setInviteComposerOpen(false)}
+          onClose={() => {
+            setInviteComposerOpen(false);
+            setInviteComposerPrefill(undefined);
+          }}
+          initialUsername={inviteComposerPrefill}
         />
 
         <InvitesInboxModal
           open={invitesInboxOpen}
-          onClose={() => setInvitesInboxOpen(false)}
+          onClose={() => {
+            setInvitesInboxOpen(false);
+            refreshPendingInvitesCount();
+          }}
           onStartGame={(acceptedGameId) => {
             setInvitesInboxOpen(false);
+            refreshPendingInvitesCount();
             router.push(`/board?id=${acceptedGameId}&mode=remote`);
+          }}
+        />
+
+        <BotGameModal
+          open={botGameOpen}
+          onClose={() => setBotGameOpen(false)}
+          onCreated={(gameId) => {
+            setBotGameOpen(false);
+            router.push(`/board?id=${gameId}`);
           }}
         />
       </div>

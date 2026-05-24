@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Check, Mailbox, RefreshCw, X } from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
-import { Alert } from "@/components/Alert";
 
 type InviteRow = {
   id: number;
@@ -18,10 +18,17 @@ type InviteRow = {
   to_profile?: { username?: string | null; full_name?: string | null } | null;
 };
 
+type Tab = "incoming" | "outgoing" | "started";
+
 function formatTimeControl(invite: InviteRow) {
   const minutes = Math.round(invite.time_control_initial_ms / 60000);
   const increment = Math.round(invite.increment_ms / 1000);
   return `${minutes}+${increment}`;
+}
+
+function secondsRemaining(expiresAtIso: string): number {
+  const ms = new Date(expiresAtIso).getTime() - Date.now();
+  return Math.max(0, Math.floor(ms / 1000));
 }
 
 export function InvitesInboxModal({
@@ -37,7 +44,9 @@ export function InvitesInboxModal({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [inviteAcceptedMessage, setInviteAcceptedMessage] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("incoming");
+  // Ticking counter so countdown labels refresh once per second.
+  const [, setTick] = useState(0);
 
   const loadInvites = useCallback(async () => {
     try {
@@ -50,15 +59,13 @@ export function InvitesInboxModal({
         invites?: InviteRow[];
         error?: string;
       };
-
       if (!response.ok) {
-        setError(data.error || "Failed to load invites");
+        setError(data.error || "Failed to load invitations");
         return;
       }
-
       setInvites(Array.isArray(data.invites) ? data.invites : []);
     } catch {
-      setError("Failed to load invites");
+      setError("Failed to load invitations");
     } finally {
       setLoading(false);
     }
@@ -66,42 +73,49 @@ export function InvitesInboxModal({
 
   useEffect(() => {
     if (!open) return;
-
     fetch("/api/profile", { cache: "no-store" })
       .then((response) => response.json())
       .then((data: { id?: string | number | null }) => {
-        if (data?.id) {
-          setCurrentUserId(String(data.id));
-        }
+        if (data?.id) setCurrentUserId(String(data.id));
       })
       .catch(() => {});
-
     loadInvites();
   }, [open, loadInvites]);
 
   useEffect(() => {
     if (!open) return;
-
     const supabase = getSupabaseBrowser();
     const channel = supabase
       .channel("invites-inbox")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "invites" },
-        () => {
-          loadInvites();
-        }
+        () => loadInvites(),
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
   }, [open, loadInvites]);
 
-  if (!open) {
-    return null;
-  }
+  // Ticker for the countdown labels on pending invitations.
+  useEffect(() => {
+    if (!open) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [open]);
+
+  // Close on Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
 
   const respond = async (id: number, action: "accept" | "decline") => {
     const response = await fetch(`/api/invites/${id}`, {
@@ -109,188 +123,254 @@ export function InvitesInboxModal({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     });
-
     const data = (await response.json().catch(() => ({}))) as {
       error?: string;
       gameId?: number;
     };
-
     if (!response.ok) {
-      setError(data.error || `Failed to ${action} invite`);
+      setError(data.error || `Failed to ${action} invitation`);
       return;
     }
-
     if (action === "accept" && data.gameId) {
-      setInviteAcceptedMessage(`Successfully accepted invite! Game #${data.gameId} is starting...`);
-      setTimeout(() => {
-        onStartGame(Number(data.gameId));
-        onClose();
-      }, 1000);
+      onStartGame(Number(data.gameId));
+      onClose();
     } else {
       await loadInvites();
     }
   };
 
   const cancel = async (id: number) => {
-    const response = await fetch(`/api/invites/${id}`, {
-      method: "DELETE",
-    });
-
+    const response = await fetch(`/api/invites/${id}`, { method: "DELETE" });
     const data = (await response.json().catch(() => ({}))) as { error?: string };
-
     if (!response.ok) {
-      setError(data.error || "Failed to cancel invite");
+      setError(data.error || "Failed to cancel invitation");
       return;
     }
-
     await loadInvites();
   };
 
-  const incoming: InviteRow[] = invites.filter((invite: InviteRow) => {
-    return (
-      invite.status === "pending" &&
+  const incoming = invites.filter(
+    (i) =>
+      i.status === "pending" &&
       currentUserId !== null &&
-      invite.to_user_id === currentUserId
-    );
-  });
+      i.to_user_id === currentUserId,
+  );
+  const outgoing = invites.filter(
+    (i) =>
+      i.status === "pending" &&
+      currentUserId !== null &&
+      i.from_user_id === currentUserId,
+  );
+  const started = invites.filter(
+    (i) =>
+      i.status === "accepted" &&
+      currentUserId !== null &&
+      i.from_user_id === currentUserId &&
+      Boolean(i.game_id),
+  );
 
-  const outgoing: InviteRow[] = invites.filter((invite: InviteRow) => {
-    return (
-      invite.status === "pending" &&
-      currentUserId !== null &&
-      invite.from_user_id === currentUserId
-    );
-  });
+  const tabs: Array<{ id: Tab; label: string; count: number }> = [
+    { id: "incoming", label: "Incoming", count: incoming.length },
+    { id: "outgoing", label: "Outgoing", count: outgoing.length },
+    { id: "started", label: "Started", count: started.length },
+  ];
 
-  const startedOutgoing: InviteRow[] = invites.filter((invite: InviteRow) => {
-    return (
-      invite.status === "accepted" &&
-      currentUserId !== null &&
-      invite.from_user_id === currentUserId &&
-      Boolean(invite.game_id)
-    );
-  });
+  const visible: InviteRow[] =
+    tab === "incoming" ? incoming : tab === "outgoing" ? outgoing : started;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-      <div className="w-full max-w-2xl rounded-xl border border-violet-700 bg-gray-900 p-6 text-white shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Invites</h2>
-          <button
-            onClick={onClose}
-            className="rounded-md bg-gray-700 px-3 py-1 hover:bg-gray-600"
-          >
-            Close
-          </button>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "oklch(0 0 0 / 0.55)" }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="invites-title"
+    >
+      <div
+        className="surface-card w-full max-w-lg overflow-hidden"
+        style={{ boxShadow: "var(--shadow-lg)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
+          <div className="flex items-center gap-2">
+            <Mailbox className="h-4 w-4" style={{ color: "var(--text-2)" }} />
+            <h2
+              id="invites-title"
+              className="text-base font-semibold tracking-tight"
+            >
+              Invitations
+            </h2>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={loadInvites}
+              disabled={loading}
+              className="btn-ghost rounded-md p-1.5"
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-ghost rounded-md p-1.5"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        <div
+          className="flex items-center gap-1 px-5 pt-3"
+          role="tablist"
+          aria-label="Invitations tabs"
+        >
+          {tabs.map((t) => {
+            const isActive = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setTab(t.id)}
+                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                style={{
+                  background: isActive ? "var(--accent-soft)" : "transparent",
+                  color: isActive ? "var(--accent)" : "var(--text-2)",
+                }}
+              >
+                {t.label}
+                {t.count > 0 && (
+                  <span
+                    className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums"
+                    style={{
+                      background: isActive
+                        ? "var(--accent)"
+                        : "var(--surface-2)",
+                      color: isActive ? "var(--accent-fg)" : "var(--text-2)",
+                    }}
+                  >
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {error && (
-          <div className="mb-3 rounded-md border border-red-700 bg-red-900/40 px-3 py-2 text-sm text-red-200">
-            {error}
-          </div>
-        )}
-
-        <div className="mb-4">
-          <button
-            onClick={loadInvites}
-            disabled={loading}
-            className="rounded-md bg-gray-800 px-3 py-1 text-sm hover:bg-gray-700"
-          >
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-gray-700 p-3">
-            <h3 className="mb-2 font-medium">Incoming</h3>
-            {incoming.length === 0 && (
-              <div className="text-sm text-gray-400">No pending invites.</div>
-            )}
-            <div className="space-y-2">
-              {incoming.map((invite: InviteRow) => (
-                <div key={invite.id} className="rounded-md border border-gray-700 p-2">
-                  <div className="text-sm">
-                    From: {invite.from_profile?.username || "Unknown"}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    Time: {formatTimeControl(invite)}
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={() => respond(invite.id, "accept")}
-                      className="rounded bg-green-700 px-2 py-1 text-xs hover:bg-green-600"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      onClick={() => respond(invite.id, "decline")}
-                      className="rounded bg-red-700 px-2 py-1 text-xs hover:bg-red-600"
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
+        <div className="max-h-[60vh] overflow-y-auto px-5 py-3">
+          {error && (
+            <div
+              className="mb-3 rounded-md px-3 py-2 text-sm"
+              style={{
+                background: "var(--danger-soft)",
+                color: "var(--text)",
+                border: "1px solid color-mix(in oklch, var(--danger) 40%, transparent)",
+              }}
+            >
+              {error}
             </div>
-          </div>
+          )}
 
-          <div className="rounded-lg border border-gray-700 p-3">
-            <h3 className="mb-2 font-medium">Outgoing</h3>
-            {outgoing.length === 0 && (
-              <div className="text-sm text-gray-400">No pending invites.</div>
-            )}
-            <div className="space-y-2">
-              {outgoing.map((invite: InviteRow) => (
-                <div key={invite.id} className="rounded-md border border-gray-700 p-2">
-                  <div className="text-sm">
-                    To: {invite.to_profile?.username || "Unknown"}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    Time: {formatTimeControl(invite)}
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={() => cancel(invite.id)}
-                      className="rounded bg-gray-700 px-2 py-1 text-xs hover:bg-gray-600"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ))}
+          {visible.length === 0 ? (
+            <div className="px-1 py-10 text-center text-sm text-muted">
+              {tab === "incoming" && "No one has challenged you."}
+              {tab === "outgoing" && "You haven't sent any pending invitations."}
+              {tab === "started" && "Accepted invitations will appear here."}
             </div>
-
-            {startedOutgoing.length > 0 && (
-              <div className="mt-3 border-t border-gray-700 pt-3">
-                <h4 className="mb-2 text-sm font-medium text-gray-200">Started</h4>
-                <div className="space-y-2">
-                  {startedOutgoing.map((invite: InviteRow) => (
-                    <div key={`started-${invite.id}`} className="rounded-md border border-green-700/50 p-2">
-                      <div className="text-sm">
-                        Vs: {invite.to_profile?.username || "Unknown"}
+          ) : (
+            <ul className="space-y-2">
+              {visible.map((invite) => {
+                const otherProfile =
+                  tab === "incoming" ? invite.from_profile : invite.to_profile;
+                const username = otherProfile?.username || "unknown";
+                const ttl =
+                  tab !== "started" ? secondsRemaining(invite.expires_at) : 0;
+                return (
+                  <li
+                    key={invite.id}
+                    className="surface-card-1 flex items-center justify-between gap-3 px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div
+                        className="truncate text-sm font-medium"
+                        style={{ color: "var(--text)" }}
+                      >
+                        @{username}
                       </div>
-                      <div className="text-xs text-gray-400">
-                        Time: {formatTimeControl(invite)}
-                      </div>
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={() => {
-                            if (invite.game_id) {
-                              onStartGame(Number(invite.game_id));
-                              onClose();
-                            }
-                          }}
-                          className="rounded bg-green-700 px-2 py-1 text-xs hover:bg-green-600"
-                        >
-                          Open Game
-                        </button>
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-muted tabular-nums">
+                        <span>{formatTimeControl(invite)}</span>
+                        {tab !== "started" && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span
+                              style={{
+                                color:
+                                  ttl <= 10
+                                    ? "oklch(0.66 0.16 25)"
+                                    : "var(--text-3)",
+                              }}
+                            >
+                              {ttl}s left
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {tab === "incoming" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => respond(invite.id, "accept")}
+                            className="btn-accent inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs"
+                          >
+                            <Check className="h-3 w-3" /> Accept
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => respond(invite.id, "decline")}
+                            className="btn-secondary inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs"
+                          >
+                            Decline
+                          </button>
+                        </>
+                      )}
+                      {tab === "outgoing" && (
+                        <button
+                          type="button"
+                          onClick={() => cancel(invite.id)}
+                          className="btn-secondary inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {tab === "started" && invite.game_id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onStartGame(Number(invite.game_id));
+                            onClose();
+                          }}
+                          className="btn-accent inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs"
+                        >
+                          Open
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </div>
     </div>

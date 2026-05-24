@@ -2,8 +2,11 @@
   master_schema.sql
   Q-Chess Master Database Schema (Supabase / PostgreSQL)
   ------------------------------------------------------
-  This file replaces all previous per-table schema scripts (e.g.,
-  deprecated: supabase_auth.sql, supabase_invites.sql, remove_timer_columns.sql).
+  HISTORICAL REFERENCE — live schema is now managed in supabase/migrations/.
+  This file is preserved as the pre-migration baseline; the same contents
+  live verbatim in supabase/migrations/0001_baseline.sql. New schema deltas
+  should be added as numbered migration files, not edited here.
+
   Apply this in the Supabase SQL editor once. It is idempotent: safe to re-run.
 
   Contents:
