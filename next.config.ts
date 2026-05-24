@@ -5,6 +5,20 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react']
   },
+  // The Stockfish engine wrapper spawns a Node child process pointed at
+  // node_modules/stockfish/bin/stockfish-18.js (a WASM JS shim). That
+  // path is built at runtime, so Next.js's tracer can't see it and won't
+  // include the file in the serverless function bundle — the bot-move
+  // and analyze routes 500 in production with ENOENT. Explicitly trace
+  // the whole bin/ folder for those two routes.
+  outputFileTracingIncludes: {
+    "/api/games/[id]/bot-move": ["./node_modules/stockfish/bin/**"],
+    "/api/games/[id]/analyze": ["./node_modules/stockfish/bin/**"],
+  },
+  // Keep `stockfish` as an external require so Next.js doesn't try to
+  // bundle its WASM shim through webpack (would mangle the wasm path
+  // resolution inside the shim).
+  serverExternalPackages: ["stockfish"],
   images: {
     // Allow unoptimized images for chess pieces
     unoptimized: true,

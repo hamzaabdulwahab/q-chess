@@ -108,11 +108,11 @@ async function startEngine(): Promise<EngineProcess> {
 
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk: string) => {
-    // Stockfish itself rarely writes to stderr; surface noisy output so
-    // it's visible in Vercel logs without crashing the process.
-    if (process.env.NODE_ENV === "development") {
-      console.error("[stockfish stderr]", chunk.toString().trim());
-    }
+    // Stockfish rarely writes to stderr — when it does it's almost
+    // always something we want to see (e.g. wasm load failure on a
+    // misconfigured deploy). Surface unconditionally; Vercel runtime
+    // logs are cheap.
+    console.error("[stockfish stderr]", chunk.toString().trim());
   });
 
   child.on("exit", (code) => {

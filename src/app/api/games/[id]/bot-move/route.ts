@@ -286,9 +286,9 @@ export async function POST(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Bot move failed";
-    if (process.env.NODE_ENV === "development") {
-      console.error("[bot-move]", error);
-    }
+    // Always log: when the engine fails in prod we need the stack to
+    // diagnose it from runtime logs.
+    console.error("[bot-move]", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
