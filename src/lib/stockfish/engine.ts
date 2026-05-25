@@ -7,8 +7,8 @@
  *      (fastest; recommended for production VPS / Docker).
  *   2. The bundled WASM build shipped by the `stockfish` npm package
  *      (Stockfish 18). Works out of the box and on Vercel; slightly
- *      slower than native but at 3-second movetime still effectively
- *      unbeatable for any human.
+ *      slower than native, so searches use short practical movetimes
+ *      with maximum skill instead of blocking the UI for seconds.
  *
  * Process lifecycle:
  *   - Lazy module-level singleton. First call starts the engine, sends
@@ -176,6 +176,10 @@ function getEngine(): Promise<EngineProcess> {
   return engineGlobals.enginePromise;
 }
 
+export async function warmStockfishEngine(): Promise<void> {
+  await getEngine();
+}
+
 interface LevelConfig {
   /** UCI options to apply before each search. */
   options: Array<{ name: string; value: string | number }>;
@@ -190,8 +194,8 @@ function levelConfig(level: BotLevel): LevelConfig {
   // the engine is already ~2500 Elo, which is grandmaster territory.
   // Spending another second per move adds nothing a human can punish.
   // Override via env if a deployment needs to dial these up or down.
-  const masterMs = Number(process.env.STOCKFISH_MASTER_MOVETIME_MS) || 350;
-  const monsterMs = Number(process.env.STOCKFISH_MONSTER_MOVETIME_MS) || 450;
+  const masterMs = Number(process.env.STOCKFISH_MASTER_MOVETIME_MS) || 300;
+  const monsterMs = Number(process.env.STOCKFISH_MONSTER_MOVETIME_MS) || 350;
 
   switch (level) {
     case "beginner":

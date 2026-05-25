@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { useEffect, useRef, useState } from "react";
-import { Home, User, LogOut } from "lucide-react";
+import { CirclePlay, LogOut, UserRound } from "lucide-react";
 // InvitesBell removed
 
 export function FloatingUserMenu() {
@@ -101,14 +101,19 @@ export function FloatingUserMenu() {
               return next;
             })
           }
-          className={`w-10 h-10 rounded-lg bg-gray-800/90 border border-gray-700 text-white grid place-items-center shadow transition-all duration-200 ${
+          className={`grid h-10 w-10 place-items-center rounded-md border shadow transition-all duration-200 ${
             open
-              ? "bg-violet-700 border-violet-600 scale-105"
-              : "hover:bg-gray-700 hover:border-gray-600"
+              ? "scale-105"
+              : "hover:bg-[var(--surface-1)]"
           }`}
+          style={{
+            background: open ? "var(--accent)" : "var(--surface)",
+            borderColor: open ? "var(--accent)" : "var(--border-strong)",
+            color: open ? "var(--accent-fg)" : "var(--text)",
+          }}
           title="Menu"
         >
-          <User
+          <UserRound
             className={`w-5 h-5 transition-transform duration-200 ${
               open ? "scale-110" : ""
             }`}
@@ -116,9 +121,10 @@ export function FloatingUserMenu() {
           />
           {/* Dropdown Arrow (points to menu) */}
           <svg
-            className={`absolute -bottom-1 right-2 w-3 h-3 text-gray-800 transition-all duration-200 ${
+            className={`absolute -bottom-1 right-2 w-3 h-3 transition-all duration-200 ${
               open ? "opacity-100 scale-100" : "opacity-0 scale-75"
             }`}
+            style={{ color: open ? "var(--accent)" : "var(--surface)" }}
             fill="currentColor"
             viewBox="0 0 12 6"
           >
@@ -126,15 +132,27 @@ export function FloatingUserMenu() {
           </svg>
         </button>
         <div
-          className={`absolute mt-3 w-56 rounded-lg border border-gray-700 bg-gray-900/95 backdrop-blur-sm text-gray-200 shadow-xl transition-all duration-200 right-0 origin-top-right dropdown-typography ${
+          className={`absolute right-0 mt-3 w-56 origin-top-right rounded-md border text-sm shadow-xl transition-all duration-200 dropdown-typography ${
             open
               ? "opacity-100 scale-100 translate-y-0"
               : "opacity-0 scale-95 translate-y-[-10px] pointer-events-none"
           }`}
-          style={{ maxHeight: "calc(100vh - 120px)", overflowY: "auto" }}
+          style={{
+            background: "var(--surface)",
+            borderColor: "var(--border)",
+            color: "var(--text-2)",
+            maxHeight: "calc(100vh - 120px)",
+            overflowY: "auto",
+          }}
         >
           {/* Dropdown Arrow (menu corner) */}
-          <div className="absolute -top-1.5 right-3 w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"></div>
+          <div
+            className="absolute -top-1.5 right-3 h-3 w-3 rotate-45 border-l border-t"
+            style={{
+              background: "var(--surface)",
+              borderColor: "var(--border)",
+            }}
+          ></div>
           <nav className="py-2">
             <Link
               href="/"
@@ -146,7 +164,7 @@ export function FloatingUserMenu() {
               }`}
             >
               <span className="flex items-center gap-2">
-                <Home className="w-4 h-4" aria-hidden />
+                <CirclePlay className="w-4 h-4" aria-hidden />
                 Q-Chess
               </span>
             </Link>
@@ -160,11 +178,14 @@ export function FloatingUserMenu() {
               }`}
             >
               <span className="flex items-center gap-2">
-                <User className="w-4 h-4" aria-hidden />
+                <UserRound className="w-4 h-4" aria-hidden />
                 View Profile
               </span>
             </Link>
-            <div className="border-t border-gray-700 my-1"></div>
+            <div
+              className="my-1 border-t"
+              style={{ borderColor: "var(--border)" }}
+            ></div>
             <button
               onClick={handleLogout}
               className="w-full text-left px-4 py-2.5 hover:bg-red-600/20 hover:text-red-400 hover:font-medium transition-all duration-200 tracking-[0.1px] font-normal"

@@ -147,7 +147,7 @@ export function GameNavigator({
             }}
             onMouseEnter={() => setShowTooltip(true)}
             onMouseLeave={() => setShowTooltip(false)}
-            className="fixed top-4 left-4 z-50 grid h-10 w-10 place-items-center rounded-md transition-colors"
+            className="fixed top-4 left-4 z-50 grid h-10 w-10 place-items-center rounded-md transition-colors md:left-24 lg:left-60"
             style={{
               background: "var(--surface)",
               border: "1px solid var(--border-strong)",
@@ -163,10 +163,9 @@ export function GameNavigator({
 
           {showTooltip && (
             <div
-              className="pointer-events-none fixed z-[60] rounded-md px-2.5 py-1.5 text-xs font-medium"
+              className="pointer-events-none fixed left-4 z-[60] rounded-md px-2.5 py-1.5 text-xs font-medium md:left-24 lg:left-60"
               style={{
                 top: "3.75rem",
-                left: "1rem",
                 background: "var(--surface-2)",
                 color: "var(--text)",
                 border: "1px solid var(--border-strong)",

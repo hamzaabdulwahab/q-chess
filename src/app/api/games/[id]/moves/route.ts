@@ -101,7 +101,22 @@ export async function POST(
       return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
     }
 
-    const { from, to, promotion } = await request.json();
+    const { from, to, promotion, clientMoveId, expectedPly, prevFen } =
+      (await request.json().catch(() => ({}))) as {
+        from?: string;
+        to?: string;
+        promotion?: string;
+        clientMoveId?: string;
+        expectedPly?: number;
+        prevFen?: string;
+      };
+
+    if (!from || !to) {
+      return NextResponse.json(
+        { error: "From and to squares are required" },
+        { status: 400 },
+      );
+    }
 
     // SECURITY: Get current game with user validation
     const game = await ChessService.getGameForUser(gameId, user.id);
@@ -109,10 +124,38 @@ export async function POST(
       return NextResponse.json({ error: "Game not found or access denied" }, { status: 404 });
     }
 
-    // Create chess service instance with current position
-    const chessService = new ChessService(
-      (game as unknown as { fen: string }).fen
+    const currentFen = (game as unknown as { fen: string }).fen;
+    const currentMoveCount = Number(
+      (game as unknown as { move_count?: number | null }).move_count ??
+        (game as unknown as { totalMoves?: number | null }).totalMoves ??
+        0,
     );
+
+    if (typeof expectedPly === "number") {
+      const expectedPreviousMoveCount = expectedPly - 1;
+      if (currentMoveCount !== expectedPreviousMoveCount) {
+        return NextResponse.json(
+          {
+            error: `Move order conflict: expected ply ${expectedPreviousMoveCount}, found ${currentMoveCount}`,
+            clientMoveId: clientMoveId ?? null,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (prevFen && prevFen.trim() !== currentFen.trim()) {
+      return NextResponse.json(
+        {
+          error: "Position conflict: stale client state",
+          clientMoveId: clientMoveId ?? null,
+        },
+        { status: 409 },
+      );
+    }
+
+    // Create chess service instance with current position
+    const chessService = new ChessService(currentFen);
 
     // Make the move
     const result = await chessService.makeMove(
@@ -120,7 +163,8 @@ export async function POST(
       from,
       to,
       promotion,
-      user.id
+      user.id,
+      expectedPly,
     );
 
     if (result.success) {
@@ -130,6 +174,7 @@ export async function POST(
         san: result.san,
         gameStatus: result.gameStatus,
         capturedPiece: result.capturedPiece,
+        clientMoveId: clientMoveId ?? null,
       });
     } else {
       return NextResponse.json({ error: result.error }, { status: 400 });

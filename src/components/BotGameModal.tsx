@@ -21,6 +21,9 @@ export function BotGameModal({ open, onClose, onCreated }: BotGameModalProps) {
       setError(null);
       return;
     }
+    void fetch("/api/stockfish/warmup", { method: "POST" }).catch(() => {
+      // Non-blocking: creation route also warms the engine.
+    });
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

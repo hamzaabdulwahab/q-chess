@@ -148,9 +148,10 @@ export function ConfirmDialog({
             onClick={onConfirm}
             className="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
             style={{ 
-              backgroundImage: 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)',
-              color: '#0b0b0e',
-              border: '1px solid rgba(167, 139, 250, 0.5)',
+              backgroundColor: 'var(--accent)',
+              backgroundImage: 'none',
+              color: 'var(--accent-fg)',
+              border: '1px solid transparent',
               fontFamily: 'Inter, system-ui, sans-serif',
               fontWeight: 500
             }}

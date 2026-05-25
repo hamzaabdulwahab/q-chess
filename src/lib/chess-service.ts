@@ -790,7 +790,8 @@ export class ChessService {
     from: string,
     to: string,
     promotion?: string,
-    userId?: string
+    userId?: string,
+    expectedPly?: number,
   ): Promise<{
     success: boolean;
     fen?: string;
@@ -829,10 +830,10 @@ export class ChessService {
       }
 
       const player = this.chess.turn() === "w" ? "white" : "black";
-      const isMultiplayerGame =
-        !!gameState.white_user_id && !!gameState.black_user_id;
+      const isFixedColorGame =
+        !!gameState.white_user_id || !!gameState.black_user_id;
 
-      if (isMultiplayerGame) {
+      if (isFixedColorGame) {
         const actorColor =
           actingUserId === gameState.white_user_id
             ? "white"
@@ -843,7 +844,7 @@ export class ChessService {
         if (!actorColor) {
           return {
             success: false,
-            error: "Only participants can make moves",
+            error: "Only the assigned player can make moves",
           };
         }
 
@@ -980,7 +981,7 @@ export class ChessService {
         p_current_player: nextTurnColor,
         p_status: gameStatus,
         p_winner: winner ?? null,
-        // Remove p_expected_ply to avoid race condition issues
+        p_expected_ply: expectedPly ?? null,
       });
 
       if (rpcError) {

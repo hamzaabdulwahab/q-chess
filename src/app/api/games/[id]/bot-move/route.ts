@@ -206,65 +206,56 @@ export async function POST(
     const isEnPassant = applied.flags.includes("e");
     const isPromotion = applied.flags.includes("p");
 
-    // ── Persist via the user-authenticated client. We skip the
-    // record_move RPC because it enforces "actor colour must be the
-    // current_player" which intentionally blocks the user from playing
-    // the bot's turn. Both inserts/updates here pass the user's RLS
-    // because:
-    //   - moves_insert_participant_game accepts inserts by any
-    //     participant of the game (which the caller is for a bot game)
-    //   - games_update_participant accepts updates by any participant
-    // The "this is actually the bot's turn" safety is enforced by the
-    // eligibility checks above.
-    const { error: moveInsertError } = await supabase.from("moves").insert({
-      game_id: gameId,
-      move_number: moveNumber,
-      player: row.bot_side,
-      move_notation: applied.san,
-      fen_before: fenBefore,
-      fen_after: fenAfter,
-      pgn,
-      captured_piece: capturedPiece,
-      is_check: isCheck && !isCheckmate,
-      is_checkmate: isCheckmate,
-      is_castling: isCastle,
-      is_en_passant: isEnPassant,
-      is_promotion: isPromotion,
-      played_by: "stockfish",
-      uci: bestmove,
-    });
-    if (moveInsertError) {
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+      "record_bot_move",
+      {
+        p_game_id: gameId,
+        p_expected_move_count: row.move_count,
+        p_player: row.bot_side,
+        p_move_notation: applied.san,
+        p_fen_before: fenBefore,
+        p_fen_after: fenAfter,
+        p_pgn: pgn,
+        p_captured_piece: capturedPiece,
+        p_is_check: isCheck && !isCheckmate,
+        p_is_checkmate: isCheckmate,
+        p_is_castling: isCastle,
+        p_is_en_passant: isEnPassant,
+        p_is_promotion: isPromotion,
+        p_current_player: nextPlayer,
+        p_status: gameStatus,
+        p_winner: winner,
+        p_uci: bestmove,
+      },
+    );
+
+    if (rpcError) {
       return NextResponse.json(
-        { error: moveInsertError.message },
+        { error: rpcError.message },
         { status: 500 },
       );
     }
 
-    const nowIso = new Date().toISOString();
-    const gamePatch: Record<string, unknown> = {
-      fen: fenAfter,
-      pgn,
-      status: gameStatus,
-      winner,
-      current_player: nextPlayer,
-      move_count: moveNumber,
-      last_move_at: nowIso,
-    };
-    if (gameStatus !== "active") {
-      gamePatch.ended_at = nowIso;
-      gamePatch.result_reason = gameStatus;
-    }
+    const persisted = rpcResult as
+      | {
+          success?: boolean;
+          error?: string;
+          duplicate?: boolean;
+          moveNumber?: number;
+        }
+      | null;
 
-    const { error: gameUpdateError } = await supabase
-      .from("games")
-      .update(gamePatch)
-      .eq("id", gameId)
-      .eq("status", "active"); // Optimistic concurrency: bail if someone
-                               // else (e.g. resign endpoint) already ended it.
-    if (gameUpdateError) {
+    if (!persisted?.success) {
+      const message = persisted?.error || "Failed to record bot move";
+      const status =
+        message.includes("conflict") ||
+        message.includes("turn") ||
+        message.includes("active")
+          ? 409
+          : 500;
       return NextResponse.json(
-        { error: gameUpdateError.message },
-        { status: 500 },
+        { error: message },
+        { status },
       );
     }
 
@@ -280,8 +271,12 @@ export async function POST(
       gameStatus,
       winner,
       currentPlayer: nextPlayer,
-      moveNumber,
+      moveNumber:
+        typeof persisted.moveNumber === "number"
+          ? persisted.moveNumber
+          : moveNumber,
       thinkingMs: spentMs,
+      duplicate: Boolean(persisted.duplicate),
     });
   } catch (error) {
     const message =

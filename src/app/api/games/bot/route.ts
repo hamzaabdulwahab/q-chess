@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Chess } from "chess.js";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { ChessService } from "@/lib/chess-service";
-import { isBotLevel, type BotColorChoice } from "@/lib/stockfish/types";
+import { warmStockfishEngine } from "@/lib/stockfish/engine";
+import type { BotColorChoice, BotLevel } from "@/lib/stockfish/types";
 
 interface CreateBotGameBody {
   color?: BotColorChoice;
@@ -64,15 +65,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json().catch(() => ({}))) as CreateBotGameBody;
+    const warmupPromise = warmStockfishEngine().catch((error) => {
+      console.error("[stockfish warmup]", error);
+    });
 
     const colorChoice: BotColorChoice =
       body.color === "white" || body.color === "black"
         ? body.color
         : "random";
-    // Default to monster (max strength) when the client doesn't pass a
-    // level — the UI no longer exposes a picker. We still accept a level
-    // for backwards compatibility and any future "easy mode" entrypoint.
-    const level = isBotLevel(body.level) ? body.level : "monster";
+    // The UI intentionally exposes only color selection. Always run the
+    // strongest practical level internally, regardless of client payload.
+    const level: BotLevel = "monster";
 
     const { initialMs, incrementMs } = parseTimeControl(body);
 
@@ -125,6 +128,13 @@ export async function POST(request: NextRequest) {
         { error: error?.message || "Failed to create bot game" },
         { status: 500 },
       );
+    }
+
+    // If the user plays black, Stockfish moves first. Await the warmup
+    // before sending the board there so the first move does not pay a
+    // cold engine-start cost.
+    if (botSide === "white") {
+      await warmupPromise;
     }
 
     return NextResponse.json({

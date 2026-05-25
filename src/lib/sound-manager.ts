@@ -20,11 +20,9 @@ class ChessSoundManager {
   private volume: number = 1.0;
 
   constructor() {
-    console.log("🎵 Initializing ChessSoundManager");
     if (typeof window !== "undefined") {
       this.initializeSounds();
       this.loadUserPreferences();
-      console.log(`🎵 Sound manager initialized - enabled: ${this.enabled}, volume: ${this.volume}`);
     }
   }
 
@@ -86,10 +84,7 @@ class ChessSoundManager {
    * Play a specific chess sound
    */
   play(soundType: ChessSoundType) {
-    console.log(`🔊 Attempting to play sound: ${soundType}, enabled: ${this.enabled}`);
-    
     if (!this.enabled) {
-      console.log(`🔇 Sound disabled, not playing: ${soundType}`);
       return;
     }
 
@@ -98,16 +93,15 @@ class ChessSoundManager {
       try {
         // Reset the audio to the beginning in case it's already playing
         sound.currentTime = 0;
-        sound.play().then(() => {
-          console.log(`✅ Successfully playing sound: ${soundType}`);
-        }).catch((error) => {
-          console.warn(`❌ Failed to play sound ${soundType}:`, error);
+        sound.play().catch(() => {
+          // Browsers can reject autoplay outside a user gesture. Keep the
+          // board interaction quiet when that happens.
         });
       } catch (error) {
-        console.warn(`⚠️ Error playing sound ${soundType}:`, error);
+        console.warn(`Error playing sound ${soundType}:`, error);
       }
     } else {
-      console.warn(`🚫 Sound not found: ${soundType}`);
+      console.warn(`Sound not found: ${soundType}`);
     }
   }
 

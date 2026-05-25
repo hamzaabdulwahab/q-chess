@@ -52,7 +52,7 @@ export function PlayerInfo({
   const label = username ?? (color === "white" ? "White" : "Black");
 
   const wrapperBorder = isCurrentTurn
-    ? "border-violet-500/70 bg-violet-950/30"
+    ? "border-white/60 bg-white/[0.06]"
     : "border-gray-700 bg-gray-900/40";
 
   return (
@@ -76,7 +76,7 @@ export function PlayerInfo({
           className="rounded-full object-cover shrink-0 md:self-center md:w-14 md:h-14"
         />
       ) : (
-        <div className="w-9 h-9 md:w-14 md:h-14 rounded-full bg-violet-700/40 grid place-items-center text-sm md:text-xl font-bold text-violet-100 shrink-0 md:self-center">
+        <div className="w-9 h-9 md:w-14 md:h-14 rounded-full bg-gray-800 grid place-items-center text-sm md:text-xl font-bold text-gray-100 shrink-0 md:self-center">
           {label.slice(0, 1).toUpperCase()}
         </div>
       )}
@@ -90,7 +90,7 @@ export function PlayerInfo({
           </span>
         </div>
         {isYou && (
-          <div className="text-[10px] uppercase tracking-wider text-violet-300 md:mt-0.5">
+          <div className="text-[10px] uppercase tracking-wider text-gray-300 md:mt-0.5">
             you
           </div>
         )}

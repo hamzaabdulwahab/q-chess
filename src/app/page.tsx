@@ -22,6 +22,7 @@ import { InviteUserModal } from "@/components/InviteUserModal";
 import { InvitesInboxModal } from "@/components/InvitesInboxModal";
 import { BotGameModal } from "@/components/BotGameModal";
 import { LobbyOnlineUsers } from "@/components/LobbyOnlineUsers";
+import { ChessLayout } from "@/components/ChessLayout";
 import type { CurrentUserIdentity } from "@/lib/multiplayer/types";
 import {
   ArchiveFilters,
@@ -387,19 +388,11 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto w-full max-w-5xl px-4 py-10">
-        {/* Header */}
-        <header className="mb-10 flex items-end justify-between gap-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Q-chess
-            </h1>
-            <p className="mt-1 text-sm text-muted">
-              {me?.username ? `Signed in as @${me.username}` : "Play chess online"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+    <ChessLayout
+      title="Play"
+      subtitle={me?.username ? `Signed in as @${me.username}` : "Play chess online"}
+      actions={
+        <>
             <button
               type="button"
               onClick={() => setInvitesInboxOpen(true)}
@@ -428,8 +421,9 @@ function HomeContent() {
               <Play className="h-4 w-4" />
               New game
             </button>
-          </div>
-        </header>
+        </>
+      }
+    >
 
         {error && (
           <div className="mb-6">
@@ -674,7 +668,6 @@ function HomeContent() {
             router.push(`/board?id=${gameId}`);
           }}
         />
-      </div>
-    </div>
+    </ChessLayout>
   );
 }
