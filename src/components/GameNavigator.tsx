@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { Archive, CirclePlay, Inbox, Menu, Send, X } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { type NewGameChoice } from "./NewGameModal";
 import { InviteUserModal } from "@/components/InviteUserModal";
@@ -243,6 +243,7 @@ export function GameNavigator({
                 }}
                 className="btn-accent inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
               >
+                <CirclePlay className="h-4 w-4" aria-hidden="true" />
                 New local game
               </button>
               <button
@@ -254,6 +255,7 @@ export function GameNavigator({
                 }}
                 className="btn-secondary inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
               >
+                <Send className="h-4 w-4" aria-hidden="true" />
                 Challenge by username
               </button>
               <button
@@ -265,6 +267,7 @@ export function GameNavigator({
                 }}
                 className="btn-secondary inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
               >
+                <Inbox className="h-4 w-4" aria-hidden="true" />
                 Open invitations
               </button>
             </div>
@@ -288,8 +291,9 @@ export function GameNavigator({
               <Link
                 href="/archive"
                 onClick={(e) => guardedNav(e, "/archive")}
-                className="btn-ghost block w-full rounded-md px-3 py-2 text-center text-sm"
+                className="btn-ghost inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-center text-sm"
               >
+                <Archive className="h-4 w-4" aria-hidden="true" />
                 Archive
               </Link>
             </div>

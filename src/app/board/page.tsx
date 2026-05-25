@@ -173,9 +173,6 @@ function BoardContent() {
   // State for access denial dialog
   const [showAccessDialog, setShowAccessDialog] = useState(false);
 
-  // State to track if cursor is over the chess board (for hiding navigator)
-  const [isBoardHovered, setIsBoardHovered] = useState(false);
-  
   // State to control navigator visibility (controlled by keyboard shortcut)
   const [navigatorOpen, setNavigatorOpen] = useState(false);
 
@@ -241,33 +238,6 @@ function BoardContent() {
       mounted = false;
     };
   }, [supabase]);
-
-  // Effect to handle chess board hover detection
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      // Find chess board elements by their CSS classes
-      const boardElement = document.querySelector('.chess-board-large');
-      const boardOrientElement = document.querySelector('.board-orient');
-      
-      if (boardElement && boardOrientElement) {
-        const rect = boardOrientElement.getBoundingClientRect();
-        const isOverBoard = (
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom
-        );
-        setIsBoardHovered(isOverBoard);
-      }
-    };
-
-    // Add event listener to document to track mouse position globally
-    document.addEventListener('mousemove', handleMouseMove);
-    
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, []);
 
   // Timers removed
   const [gameOver, setGameOver] = useState<null | {
@@ -875,6 +845,7 @@ function BoardContent() {
     interface BotMovePayload {
       ok?: boolean;
       error?: string;
+      retryAfterMs?: number;
       san?: string;
       uci?: string;
       from?: string;
@@ -892,9 +863,21 @@ function BoardContent() {
     }> => {
       const r = await fetch(`/api/games/${effectiveGameId}/bot-move`, {
         method: "POST",
+        cache: "no-store",
       });
       const p = (await r.json().catch(() => ({}))) as BotMovePayload;
       return { status: r.status, payload: p };
+    };
+
+    const retryBotTurn = (delayMs: number, message?: string) => {
+      if (cancelled) return;
+      if (message) setToast(message);
+      if (lastBotRequestRef.current === signature) {
+        lastBotRequestRef.current = null;
+      }
+      window.setTimeout(() => {
+        if (!cancelled) setBotCommitVersion((version) => version + 1);
+      }, delayMs);
     };
 
     // The human move is already committed before this runs, so a tiny
@@ -904,17 +887,46 @@ function BoardContent() {
       void (async () => {
         try {
           // Commit gating above should make 409 rare. Keep a short retry
-          // window for production replication jitter, but do not let it
-          // become visible thinking time.
+          // window for production replication jitter / cold starts, but do
+          // not let it become a stuck bot turn.
           let result = await requestBotMove();
-          for (let i = 0; result.status === 409 && i < 3; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
+          for (
+            let i = 0;
+            (result.status === 409 ||
+              result.status === 429 ||
+              result.status >= 500) &&
+            i < 3;
+            i++
+          ) {
+            const retryAfter =
+              result.status === 429 && result.payload.retryAfterMs
+                ? Math.min(result.payload.retryAfterMs, 1200)
+                : result.status === 409
+                  ? 120
+                  : 240 * (i + 1);
+            await new Promise((resolve) => setTimeout(resolve, retryAfter));
             result = await requestBotMove();
           }
 
           const { status, payload } = result;
           if (status !== 200 || !payload.ok || !payload.fen) {
-            setToast(payload.error || "Stockfish move failed");
+            if (status === 409) {
+              if (effectiveGameId) {
+                void loadGameData(effectiveGameId, { resetClocks: false });
+              }
+              if (lastBotRequestRef.current === signature) {
+                lastBotRequestRef.current = null;
+              }
+              return;
+            }
+            retryBotTurn(
+              status === 429 && payload.retryAfterMs
+                ? Math.min(payload.retryAfterMs, 1500)
+                : 650,
+              payload.error
+                ? `Stockfish delayed: ${payload.error}`
+                : "Stockfish delayed. Retrying...",
+            );
             return;
           }
 
@@ -985,7 +997,7 @@ function BoardContent() {
             isIllegal: false,
           });
         } catch {
-          if (!cancelled) setToast("Stockfish request failed");
+          retryBotTurn(700, "Stockfish request failed. Retrying...");
         } finally {
           if (!cancelled) {
             botInFlightRef.current = false;
@@ -1325,9 +1337,7 @@ function BoardContent() {
   };
 
   // Memes and YouTube UI removed
-  const [isOnline, setIsOnline] = useState<boolean>(
-    typeof navigator !== "undefined" ? navigator.onLine : true,
-  );
+  const [isOnline, setIsOnline] = useState<boolean>(true);
   
   // Removed offline queue system - game will be disabled when offline instead
   // const [queuedCount, setQueuedCount] = useState<number>(0);
@@ -1343,6 +1353,7 @@ function BoardContent() {
   // Track online/offline status for clean game disabling
   useEffect(() => {
     const updateOnline = () => setIsOnline(navigator.onLine);
+    updateOnline();
     window.addEventListener("online", updateOnline);
     window.addEventListener("offline", updateOnline);
     
@@ -1500,10 +1511,6 @@ function BoardContent() {
     setNavigatorOpen(open);
   }, []);
 
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
   // Do not block the board on non-fatal errors; show inline banners instead
 
   return (
@@ -1600,6 +1607,26 @@ function BoardContent() {
               </div>
             )}
 
+            {loading && (
+              <div
+                className="inline-flex w-fit items-center gap-2 rounded-md px-3 py-1.5 text-xs"
+                style={{
+                  background: "var(--surface-1)",
+                  color: "var(--text-2)",
+                  border: "1px solid var(--border)",
+                }}
+                role="status"
+                aria-live="polite"
+              >
+                <span
+                  className="h-1.5 w-1.5 animate-pulse rounded-full"
+                  style={{ background: "var(--accent)" }}
+                  aria-hidden="true"
+                />
+                Syncing game
+              </div>
+            )}
+
             {drawOfferFromOpponent && effectiveGameId && (
               <DrawOfferBanner
                 gameId={effectiveGameId}
@@ -1647,6 +1674,7 @@ function BoardContent() {
                   onMoveCommitted={handleMoveCommitted}
                   onMoveRejected={handleMoveRejected}
                   disabled={
+                    loading ||
                     gameState.gameStatus !== "active" ||
                     Boolean(gameOver) ||
                     !isOnline ||
@@ -1724,7 +1752,7 @@ function BoardContent() {
                 sidePanelCollapsed ? "flex lg:hidden" : "flex"
               }`}
             >
-              <div className="min-h-0 flex-1">
+              <div className="order-last min-h-0 flex-1 lg:order-none">
                 <MoveHistory
                   moves={moveRecords}
                   startedAt={gameStartedAt}
@@ -1746,7 +1774,7 @@ function BoardContent() {
                 />
               </div>
               <div
-                className="space-y-3 p-3"
+                className="order-first space-y-3 p-3 lg:order-none"
                 style={{ borderTop: "1px solid var(--border)" }}
               >
                 <div
@@ -1813,7 +1841,7 @@ function BoardContent() {
       <GameNavigator
         open={navigatorOpen}
         onOpenChange={handleNavigatorOpenChange}
-        showButton={!isBoardHovered}
+        showButton={false}
         onNewGame={(choice) => {
           if (choice === "local-2v2") {
             resetGame();

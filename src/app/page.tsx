@@ -383,8 +383,47 @@ function HomeContent() {
     });
   }, [games, category, winner]);
 
-  if (authed === null || loading) {
+  if (authed === null) {
     return <LoadingSpinner />;
+  }
+
+  if (loading) {
+    return (
+      <ChessLayout
+        title="Play"
+        subtitle={me?.username ? `Signed in as @${me.username}` : "Play chess online"}
+      >
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="surface-card p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="h-4 w-28 rounded bg-[var(--surface-2)]" />
+              <div className="h-8 w-24 rounded-md bg-[var(--surface-1)]" />
+            </div>
+            <div className="space-y-2">
+              {[0, 1, 2, 3].map((item) => (
+                <div
+                  key={item}
+                  className="h-12 rounded-md bg-[var(--surface-1)]"
+                  style={{ opacity: 1 - item * 0.12 }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="surface-card p-4">
+            <div className="h-4 w-32 rounded bg-[var(--surface-2)]" />
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {[0, 1, 2, 3].map((item) => (
+                <div
+                  key={item}
+                  className="aspect-[4/3] rounded-md bg-[var(--surface-1)]"
+                  style={{ opacity: 1 - item * 0.1 }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </ChessLayout>
+    );
   }
 
   return (

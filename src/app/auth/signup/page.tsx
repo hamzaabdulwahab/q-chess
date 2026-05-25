@@ -151,7 +151,10 @@ export default function SignUp() {
           password: password,
         },
       );
-      if (validationError) {
+      if (validationError?.code === "PGRST202") {
+        // The migration that installs validate_user_signup may not be present
+        // on older environments yet. The same validation already ran locally.
+      } else if (validationError) {
         console.warn("Password validation failed:", validationError);
       } else if (validation && !validation.valid) {
         setError(validation.errors.join(" "));

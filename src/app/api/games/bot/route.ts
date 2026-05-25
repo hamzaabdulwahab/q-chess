@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Chess } from "chess.js";
+import { Chess, type Move } from "chess.js";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { ChessService } from "@/lib/chess-service";
-import { warmStockfishEngine } from "@/lib/stockfish/engine";
+import {
+  searchBestMove,
+  warmStockfishEngine,
+} from "@/lib/stockfish/engine";
 import type { BotColorChoice, BotLevel } from "@/lib/stockfish/types";
 
 interface CreateBotGameBody {
@@ -36,6 +39,97 @@ function parseTimeControl(body: CreateBotGameBody): {
   return {
     initialMs: Math.floor(minutes * 60 * 1000),
     incrementMs: Math.floor(incrementSeconds * 1000),
+  };
+}
+
+async function recordOpeningBotMove({
+  supabase,
+  gameId,
+  botSide,
+  level,
+  initialFen,
+}: {
+  supabase: ReturnType<typeof getSupabaseServer>;
+  gameId: number;
+  botSide: "white" | "black";
+  level: BotLevel;
+  initialFen: string;
+}) {
+  const { bestmove, spentMs } = await searchBestMove("startpos", level);
+  const chess = new Chess(initialFen);
+  const from = bestmove.slice(0, 2);
+  const to = bestmove.slice(2, 4);
+  const promotion = bestmove.length > 4 ? bestmove.slice(4, 5) : undefined;
+
+  let applied: Move | null;
+  try {
+    applied = chess.move({ from, to, promotion });
+  } catch {
+    applied = null;
+  }
+  if (!applied) {
+    throw new Error(`Engine returned an illegal opening move: ${bestmove}`);
+  }
+
+  const fenAfter = chess.fen();
+  const nextPlayer: "white" | "black" =
+    chess.turn() === "w" ? "white" : "black";
+  const isCheckmate = chess.isCheckmate();
+  const gameStatus = isCheckmate
+    ? "checkmate"
+    : chess.isStalemate()
+      ? "stalemate"
+      : chess.isDraw()
+        ? "draw"
+        : "active";
+  const winner: "white" | "black" | "draw" | null = isCheckmate
+    ? botSide
+    : gameStatus === "draw" || gameStatus === "stalemate"
+      ? "draw"
+      : null;
+
+  const { data: rpcResult, error: rpcError } = await supabase.rpc(
+    "record_bot_move",
+    {
+      p_game_id: gameId,
+      p_expected_move_count: 0,
+      p_player: botSide,
+      p_move_notation: applied.san,
+      p_fen_before: initialFen,
+      p_fen_after: fenAfter,
+      p_pgn: chess.pgn(),
+      p_captured_piece: applied.captured ?? null,
+      p_is_check: chess.inCheck() && !isCheckmate,
+      p_is_checkmate: isCheckmate,
+      p_is_castling:
+        applied.flags.includes("k") || applied.flags.includes("q"),
+      p_is_en_passant: applied.flags.includes("e"),
+      p_is_promotion: applied.flags.includes("p"),
+      p_current_player: nextPlayer,
+      p_status: gameStatus,
+      p_winner: winner,
+      p_uci: bestmove,
+    },
+  );
+
+  const persisted = rpcResult as
+    | { success?: boolean; error?: string; moveNumber?: number }
+    | null;
+  if (rpcError || !persisted?.success) {
+    throw new Error(
+      rpcError?.message || persisted?.error || "Failed to record opening move",
+    );
+  }
+
+  return {
+    san: applied.san,
+    uci: bestmove,
+    from,
+    to,
+    fen: fenAfter,
+    currentPlayer: nextPlayer,
+    moveNumber: persisted.moveNumber ?? 1,
+    thinkingMs: spentMs,
   };
 }
 
@@ -130,11 +224,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If the user plays black, Stockfish moves first. Await the warmup
-    // before sending the board there so the first move does not pay a
-    // cold engine-start cost.
+    let openingBotMove:
+      | Awaited<ReturnType<typeof recordOpeningBotMove>>
+      | null = null;
+
+    // If the user plays black, Stockfish moves first before the route
+    // returns. That removes the fragile "new game loaded, now wait for
+    // a second client request" pause.
     if (botSide === "white") {
-      await warmupPromise;
+      try {
+        openingBotMove = await recordOpeningBotMove({
+          supabase,
+          gameId: data.id as number,
+          botSide,
+          level,
+          initialFen,
+        });
+      } catch (error) {
+        console.error("[stockfish opening move]", error);
+        await warmupPromise;
+      }
     }
 
     return NextResponse.json({
@@ -142,6 +251,7 @@ export async function POST(request: NextRequest) {
       humanColor,
       botSide,
       botLevel: level,
+      openingBotMove,
     });
   } catch (error) {
     const message =

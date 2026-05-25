@@ -176,6 +176,30 @@ function getEngine(): Promise<EngineProcess> {
   return engineGlobals.enginePromise;
 }
 
+function sendAndWaitForLine(
+  engine: EngineProcess,
+  command: string,
+  marker: string,
+  timeoutMs: number,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const listeners = getLineListeners(engine);
+    const timer = setTimeout(() => {
+      listeners.delete(handler);
+      reject(new Error(`Timed out waiting for "${marker}"`));
+    }, timeoutMs);
+    const handler = (line: string) => {
+      if (line === marker || line.startsWith(marker + " ")) {
+        clearTimeout(timer);
+        listeners.delete(handler);
+        resolve();
+      }
+    };
+    listeners.add(handler);
+    engine.child.stdin.write(command + "\n");
+  });
+}
+
 export async function warmStockfishEngine(): Promise<void> {
   await getEngine();
 }
@@ -283,7 +307,7 @@ export async function searchBestMove(
         `setoption name ${opt.name} value ${opt.value}\n`,
       );
     }
-    engine.child.stdin.write("isready\n");
+    await sendAndWaitForLine(engine, "isready", "readyok", 10_000);
 
     const positionCommand = `position ${positionSpec}`;
 

@@ -448,12 +448,16 @@ body {
 
 @media (min-width: 768px) and (max-width: 1023px) {
   .board-area-with-panels .chess-board-large,
-  .board-area-with-panels .board-orient,
-  .board-area-with-panels .board-stack {
+  .board-area-with-panels .board-orient {
     width: min(calc(100vw - 7rem), 70dvh);
     height: min(calc(100vw - 7rem), 70dvh);
     max-width: calc(100vw - 7rem);
     max-height: 70dvh;
+  }
+
+  .board-area-with-panels .board-stack {
+    width: min(calc(100vw - 7rem), 70dvh);
+    max-width: calc(100vw - 7rem);
   }
 
   .board-area-with-panels .chess-square-large {
@@ -473,12 +477,16 @@ body {
 
 @media (max-width: 767px) {
   .board-area-with-panels .chess-board-large,
-  .board-area-with-panels .board-orient,
-  .board-area-with-panels .board-stack {
+  .board-area-with-panels .board-orient {
     width: min(calc(100vw - 1.5rem), 68dvh);
     height: min(calc(100vw - 1.5rem), 68dvh);
     max-width: calc(100vw - 1.5rem);
     max-height: 68dvh;
+  }
+
+  .board-area-with-panels .board-stack {
+    width: min(calc(100vw - 1.5rem), 68dvh);
+    max-width: calc(100vw - 1.5rem);
   }
 
   .board-area-with-panels .chess-square-large {

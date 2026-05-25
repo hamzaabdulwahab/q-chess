@@ -5,13 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   Archive,
-  ChevronLeft,
   CirclePlay,
   Crown,
+  House,
   LogOut,
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
   UserRound,
   X,
 } from "lucide-react";
@@ -88,18 +86,7 @@ export function ChessLayout({
 }: ChessLayoutProps) {
   const pathname = usePathname() ?? "";
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [railExpanded, setRailExpanded] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    try {
-      setRailExpanded(
-        window.localStorage.getItem("q-chess.railExpanded") === "true",
-      );
-    } catch {
-      // Non-fatal: keep the quiet collapsed rail.
-    }
-  }, []);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -140,18 +127,6 @@ export function ChessLayout({
     window.location.href = "/auth/signin";
   };
 
-  const toggleRail = () => {
-    setRailExpanded((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem("q-chess.railExpanded", String(next));
-      } catch {
-        // Non-fatal.
-      }
-      return next;
-    });
-  };
-
   const renderNav = (expanded: boolean) => (
     <nav className="space-y-1" aria-label="Primary navigation">
       {navItems.map(({ href, label, Icon }) => {
@@ -161,17 +136,20 @@ export function ChessLayout({
             key={href}
             href={href}
             onClick={(event) => guardedNav(event, href)}
-            className={`group flex items-center rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] ${
-              expanded ? "justify-center lg:justify-start lg:gap-3" : "justify-center"
+            className={`group flex items-center rounded-md text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] ${
+              expanded
+                ? "gap-3 px-3 py-2"
+                : "h-10 w-10 justify-center"
             }`}
             style={{
               background: active ? "var(--accent-soft)" : "transparent",
-              color: active ? "var(--text)" : "var(--text-2)",
+              color: active ? "var(--text)" : "var(--text-3)",
             }}
-            title={expanded ? undefined : label}
+            title={label}
+            aria-label={expanded ? undefined : label}
           >
-            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className={expanded ? "hidden truncate lg:inline" : "sr-only"}>
+            <Icon className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden="true" />
+            <span className={expanded ? "truncate" : "sr-only"}>
               {label}
             </span>
           </Link>
@@ -183,59 +161,23 @@ export function ChessLayout({
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r py-4 transition-[width] duration-200 ease-out md:flex ${
-          railExpanded ? "w-16 px-2 lg:w-56 lg:px-3" : "w-16 px-2"
-        }`}
+        className="fixed inset-y-0 left-0 z-40 hidden w-[4.5rem] flex-col items-center border-r px-2 py-4 md:flex"
         style={{
           background: "var(--sidebar)",
           borderColor: "var(--border)",
         }}
       >
-        <div
-          className={`flex items-center ${
-            railExpanded ? "justify-center lg:justify-between" : "justify-center"
-          }`}
-        >
-          <BrandMark expanded={railExpanded} />
-          {railExpanded && (
-            <button
-              type="button"
-              onClick={toggleRail}
-              className="hidden h-8 w-8 place-items-center rounded-md outline-none transition-colors hover:bg-[var(--surface-1)] focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] lg:grid"
-              style={{ color: "var(--text-2)" }}
-              aria-label="Collapse navigation"
-              title="Collapse navigation"
-            >
-              <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
-        </div>
-        {!railExpanded && (
-          <button
-            type="button"
-            onClick={toggleRail}
-            className="mt-4 hidden h-9 w-full place-items-center rounded-md outline-none transition-colors hover:bg-[var(--surface-1)] focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] lg:grid"
-            style={{ color: "var(--text-2)" }}
-            aria-label="Expand navigation"
-            title="Expand navigation"
-          >
-            <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-          </button>
-        )}
-        <div className="mt-6 flex-1">{renderNav(railExpanded)}</div>
+        <BrandMark expanded={false} />
+        <div className="mt-7 flex flex-1 justify-center">{renderNav(false)}</div>
         <button
           type="button"
           onClick={logout}
-          className={`flex items-center rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-[var(--surface-1)] focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] ${
-            railExpanded ? "justify-center lg:justify-start lg:gap-3" : "justify-center"
-          }`}
-          style={{ color: "var(--text-2)" }}
-          title={railExpanded ? undefined : "Log out"}
+          className="grid h-10 w-10 place-items-center rounded-md text-sm font-medium outline-none transition-colors hover:bg-[var(--surface-1)] focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)]"
+          style={{ color: "var(--text-3)" }}
+          title="Log out"
+          aria-label="Log out"
         >
-          <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className={railExpanded ? "hidden truncate lg:inline" : "sr-only"}>
-            Log out
-          </span>
+          <LogOut className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden="true" />
         </button>
       </aside>
 
@@ -267,9 +209,9 @@ export function ChessLayout({
         <Link
           href="/"
           className="grid h-9 w-9 place-items-center rounded-md outline-none transition-colors hover:bg-[var(--surface-1)] focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)]"
-          aria-label="Back to play"
+          aria-label="Go to lobby"
         >
-          <ChevronLeft className="h-5 w-5" />
+          <House className="h-5 w-5" />
         </Link>
       </header>
 
@@ -311,9 +253,7 @@ export function ChessLayout({
       )}
 
       <main
-        className={`min-h-screen pt-14 transition-[padding-left] duration-200 ease-out md:pt-0 ${
-          railExpanded ? "md:pl-16 lg:pl-56" : "md:pl-16"
-        } ${className}`}
+        className={`min-h-screen pt-14 md:pl-[4.5rem] md:pt-0 ${className}`}
       >
         <div
           className={

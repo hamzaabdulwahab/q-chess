@@ -8,13 +8,18 @@ export const LoadingSpinner: React.FC = () => {
     >
       <div className="flex flex-col items-center gap-3" role="status">
         <div
-          className="h-10 w-10 animate-spin rounded-full"
-          style={{
-            border: "2px solid var(--border-strong)",
-            borderTopColor: "var(--accent)",
-            boxShadow: "0 0 0 1px oklch(0 0 0 / 0.25)",
-          }}
-        />
+          className="grid h-12 w-12 grid-cols-2 overflow-hidden rounded-md border"
+          style={{ borderColor: "var(--border-strong)" }}
+          aria-hidden="true"
+        >
+          <span className="animate-pulse" style={{ background: "var(--surface-2)" }} />
+          <span className="animate-pulse" style={{ background: "var(--surface)" }} />
+          <span className="animate-pulse" style={{ background: "var(--surface)" }} />
+          <span className="animate-pulse" style={{ background: "var(--surface-2)" }} />
+        </div>
+        <span className="text-xs font-medium uppercase tracking-wider text-muted">
+          Loading Q-Chess
+        </span>
         <span className="sr-only">Loading Q-Chess</span>
       </div>
     </div>

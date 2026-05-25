@@ -18,11 +18,13 @@ class ChessSoundManager {
   private sounds: Map<ChessSoundType, HTMLAudioElement> = new Map();
   private enabled: boolean = true;
   private volume: number = 1.0;
+  private unlocked: boolean = false;
 
   constructor() {
     if (typeof window !== "undefined") {
       this.initializeSounds();
       this.loadUserPreferences();
+      this.attachUnlockListeners();
     }
   }
 
@@ -51,6 +53,35 @@ class ChessSoundManager {
 
       this.sounds.set(soundType as ChessSoundType, audio);
     });
+  }
+
+  private attachUnlockListeners() {
+    const unlock = () => void this.unlock();
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true, passive: true });
+  }
+
+  /**
+   * Prime the audio element during a user gesture so later bot / opponent
+   * sounds are not rejected by browser autoplay rules.
+   */
+  async unlock() {
+    if (this.unlocked || !this.enabled) return;
+    const sample = this.sounds.get("move");
+    if (!sample) return;
+
+    try {
+      sample.muted = true;
+      sample.currentTime = 0;
+      await sample.play();
+      sample.pause();
+      sample.currentTime = 0;
+      sample.muted = false;
+      this.unlocked = true;
+    } catch {
+      sample.muted = false;
+    }
   }
 
   private loadUserPreferences() {
@@ -91,11 +122,12 @@ class ChessSoundManager {
     const sound = this.sounds.get(soundType);
     if (sound) {
       try {
-        // Reset the audio to the beginning in case it's already playing
-        sound.currentTime = 0;
-        sound.play().catch(() => {
+        const playable = sound.cloneNode(true) as HTMLAudioElement;
+        playable.volume = this.volume;
+        playable.play().catch(() => {
           // Browsers can reject autoplay outside a user gesture. Keep the
-          // board interaction quiet when that happens.
+          // board interaction quiet when that happens; the next gesture
+          // will prime the manager via unlock().
         });
       } catch (error) {
         console.warn(`Error playing sound ${soundType}:`, error);

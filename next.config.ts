@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
   // Ensure static files are served properly
   experimental: {
     optimizePackageImports: ['lucide-react']

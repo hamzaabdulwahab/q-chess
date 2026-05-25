@@ -12,6 +12,7 @@ export function FloatingUserMenu() {
   const isHome = pathname === "/";
   const isProfile = pathname.startsWith("/profile");
   const isBoard = pathname.startsWith("/board");
+  const isArchive = pathname.startsWith("/archive");
   const [open, setOpen] = useState(false);
   const SOURCE = "user-menu";
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -76,8 +77,11 @@ export function FloatingUserMenu() {
     };
   }, []);
 
-  // Hide entirely on auth routes and the game board page
-  if (pathname.startsWith("/auth") || isBoard) return null;
+  // App-shell pages render their own navigation. Hiding this legacy floating
+  // trigger prevents the old profile affordance from competing with the rail.
+  if (pathname.startsWith("/auth") || isBoard || isHome || isProfile || isArchive) {
+    return null;
+  }
 
   return (
     <div
