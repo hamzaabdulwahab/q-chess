@@ -2,10 +2,8 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Camera,
   Eye,
   EyeOff,
@@ -14,6 +12,7 @@ import {
 } from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { Avatar } from "@/components/Avatar";
+import { ChessLayout } from "@/components/ChessLayout";
 
 type ProfileData = {
   id: string;
@@ -211,21 +210,12 @@ export default function ProfilePage() {
     : stagedAvatarPreviewUrl || data?.avatar_url || null;
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto w-full max-w-3xl px-4 py-10">
-        {/* Top bar */}
-        <div className="mb-8 flex items-center justify-between">
-          <Link
-            href="/"
-            className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back
-          </Link>
-          <h1 className="text-base font-semibold tracking-tight">Profile</h1>
-          <div className="w-[68px]" aria-hidden="true" />
-        </div>
-
+    <ChessLayout
+      title="Profile"
+      subtitle="Manage your player identity and account settings."
+      className="max-w-none"
+    >
+      <div className="mx-auto w-full max-w-3xl">
         {loading ? (
           <div className="surface-card p-10 text-center text-sm text-muted">
             Loading…
@@ -564,6 +554,6 @@ export default function ProfilePage() {
         className="hidden"
         onChange={onAvatarFileSelected}
       />
-    </div>
+    </ChessLayout>
   );
 }

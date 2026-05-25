@@ -22,7 +22,7 @@ const OPTIONS: Option[] = [
   {
     id: "play-vs-bot",
     label: "Play vs Stockfish",
-    description: "Five strength levels, from Beginner to Monster.",
+    description: "Choose White, Black, or Random. Strength is automatic.",
     Icon: Bot,
     primary: true,
   },

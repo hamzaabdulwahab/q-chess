@@ -16,6 +16,8 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawOfferBanner } from "@/components/DrawOfferBanner";
 import { GameEndScreen, type EndStatus } from "@/components/GameEndScreen";
 import { PlayerCard } from "@/components/PlayerCard";
+import { ChessLayout } from "@/components/ChessLayout";
+import { InGameToolbar } from "@/components/InGameToolbar";
 import {
   MoveHistory,
   type MoveHistoryEntry,
@@ -36,7 +38,13 @@ import { soundManager } from "@/lib/sound-manager";
 // useRouter no longer needed after removing online redirect
 // MemeRotator and YouTubeMiniPlayer removed by request
 import { ChessClient } from "@/lib/chess-client";
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import {
+  Menu,
+  PanelRightClose,
+  PanelRightOpen,
+  Plus,
+  RotateCw,
+} from "lucide-react";
 
 type Profile = {
   username: string;
@@ -56,13 +64,8 @@ type MoveRow = {
   created_at?: string | null;
 };
 
-// Diagnostic logger gated to dev. Production builds get no noise from
-// per-move / per-realtime-event chatter, but the lines remain readable
-// to developers tailing `npm run dev`.
 const devLog = (...args: unknown[]) => {
-  if (process.env.NODE_ENV === "development") {
-    console.log(...args);
-  }
+  void args;
 };
 
 const extractCapturedPieces = (moves: MoveRow[]) => {
@@ -150,6 +153,15 @@ function BoardContent() {
   // idempotent without a stuck mutex — each unique board position is
   // requested at most once per browser session.
   const lastBotRequestRef = useRef<string | null>(null);
+  // When a human move is optimistic but not yet persisted, hold the bot
+  // request until the moves API confirms the commit. This avoids 409 retry
+  // loops that make Stockfish feel slow and can replay stale state.
+  const botWaitingForHumanCommitRef = useRef<string | null>(null);
+  const [botCommitVersion, setBotCommitVersion] = useState(0);
+  const supabase = useMemo(() => {
+    const sb = getSupabaseBrowser();
+    return sb;
+  }, []);
 
   // Auto-dismiss transient toasts after 4 seconds.
   useEffect(() => {
@@ -169,6 +181,7 @@ function BoardContent() {
 
   // Side panel collapse state, persisted across reloads.
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false);
+  const [boardFlipped, setBoardFlipped] = useState(false);
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem("q-chess.sidePanelCollapsed");
@@ -214,12 +227,12 @@ function BoardContent() {
   useEffect(() => {
     let mounted = true;
 
-    fetch("/api/profile", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data: { id?: string | number | null }) => {
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
         if (!mounted) return;
-        if (data?.id) {
-          setCurrentUserId(String(data.id));
+        if (data.user?.id) {
+          setCurrentUserId(data.user.id);
         }
       })
       .catch(() => {});
@@ -227,7 +240,7 @@ function BoardContent() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [supabase]);
 
   // Effect to handle chess board hover detection
   useEffect(() => {
@@ -261,10 +274,6 @@ function BoardContent() {
     winner: "white" | "black";
     reason: string;
   }>(null);
-  const supabase = useMemo(() => {
-    const sb = getSupabaseBrowser();
-    return sb;
-  }, []);
   // Vs Computer removed
   // no timer hydration needed
   // After an optimistic move, we expect the next turn; use this to ignore stale server snapshots
@@ -281,6 +290,13 @@ function BoardContent() {
     const isValidInteger = /^\d+$/.test(gameId);
     return isValidInteger ? parseInt(gameId) : null;
   }, [overrideGameId, gameId]);
+
+  useEffect(() => {
+    botWaitingForHumanCommitRef.current = null;
+    lastBotRequestRef.current = null;
+    botInFlightRef.current = false;
+    setIsBotThinking(false);
+  }, [effectiveGameId]);
 
   const startLocalGame = useCallback((): void => {
     // Initialize a local, non-persisted game
@@ -300,6 +316,7 @@ function BoardContent() {
     setGameStartedAt(new Date().toISOString());
     setBotGame(null);
     setIsBotThinking(false);
+    botWaitingForHumanCommitRef.current = null;
     lastBotRequestRef.current = null;
     setError(null);
     setLoading(false);
@@ -339,6 +356,16 @@ function BoardContent() {
           // Parse move history to extract captured pieces and move notations
           const moveHistory = rawMoves.map((move) => move.move_notation);
           const capturedPieces = extractCapturedPieces(rawMoves);
+          const newMoveCount =
+            (data.game.move_count as number) ?? rawMoves.length;
+
+          if (newMoveCount < prevMoveCountRef.current) {
+            devLog(
+              `Ignoring stale game snapshot (move_count ${newMoveCount} < seen ${prevMoveCountRef.current})`,
+            );
+            setLoading(false);
+            return;
+          }
 
           // If an optimistic move was just applied, ignore stale initial snapshot
           if (
@@ -416,8 +443,6 @@ function BoardContent() {
           }
 
           // Detect new opponent moves and play the appropriate sound.
-          const newMoveCount =
-            (data.game.move_count as number) ?? rawMoves.length;
           const lastMove = rawMoves[rawMoves.length - 1];
           if (
             newMoveCount > prevMoveCountRef.current &&
@@ -519,6 +544,16 @@ function BoardContent() {
     try {
       setLoading(true);
       devLog("Creating new game...");
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        startLocalGame();
+        return;
+      }
+
+      setCurrentUserId(user.id);
       const response = await fetch("/api/games", {
         method: "POST",
       });
@@ -600,7 +635,7 @@ function BoardContent() {
       // Fallback to local game
       startLocalGame();
     }
-  }, [startLocalGame]);
+  }, [startLocalGame, supabase]);
 
   // Dialog handlers for access denial
   const handleCreateNewGame = useCallback(async () => {
@@ -794,7 +829,12 @@ function BoardContent() {
       ? remoteColorFromParticipants ?? youColorParam ?? null
       : null;
 
-  const boardOrientation: "white" | "black" = myRemoteColor ?? fenTurn;
+  const baseBoardOrientation: "white" | "black" = myRemoteColor ?? fenTurn;
+  const boardOrientation: "white" | "black" = boardFlipped
+    ? baseBoardOrientation === "white"
+      ? "black"
+      : "white"
+    : baseBoardOrientation;
 
   const remoteTurnLocked =
     isFixedColorGame &&
@@ -818,6 +858,11 @@ function BoardContent() {
     if (!effectiveGameId || !botGame) return;
     if (gameState.gameStatus !== "active") return;
     if (gameState.currentTurn !== botGame.botSide) return;
+    if (botInFlightRef.current) return;
+    if (botWaitingForHumanCommitRef.current === gameState.fen) return;
+    if (botWaitingForHumanCommitRef.current) {
+      botWaitingForHumanCommitRef.current = null;
+    }
 
     const signature = `${effectiveGameId}:${gameState.fen}`;
     if (lastBotRequestRef.current === signature) return;
@@ -852,21 +897,18 @@ function BoardContent() {
       return { status: r.status, payload: p };
     };
 
-    // The 180ms piece slide for the user's own move is already in
-    // flight by the time we get here; a tiny gate (≈ first frame of
-    // the animation) is plenty to keep the moves visually distinct
-    // without making the bot feel sluggish.
+    // The human move is already committed before this runs, so a tiny
+    // frame gate keeps the two piece slides visually distinct without
+    // adding perceptible bot delay.
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          // The user's own /moves POST is racing this request — until
-          // that POST has committed in the DB, `current_player` is still
-          // the user's colour and bot-move returns 409. Retry tightly
-          // so the engine kicks in immediately after the human's move
-          // persists. Total ceiling: ~1.6s (8 retries × 200ms).
+          // Commit gating above should make 409 rare. Keep a short retry
+          // window for production replication jitter, but do not let it
+          // become visible thinking time.
           let result = await requestBotMove();
-          for (let i = 0; result.status === 409 && i < 8; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 200));
+          for (let i = 0; result.status === 409 && i < 3; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
             result = await requestBotMove();
           }
 
@@ -951,7 +993,7 @@ function BoardContent() {
           }
         }
       })();
-    }, 80);
+    }, 40);
 
     return () => {
       cancelled = true;
@@ -964,6 +1006,7 @@ function BoardContent() {
   }, [
     effectiveGameId,
     botGame,
+    botCommitVersion,
     gameState.gameStatus,
     gameState.currentTurn,
     gameState.fen,
@@ -1106,6 +1149,10 @@ function BoardContent() {
         expectedFenRef.current = null;
       }, 3000);
 
+      if (!isEnd && botGame?.botSide === fenTurn) {
+        botWaitingForHumanCommitRef.current = result.fen;
+      }
+
       const optimisticWinner: "white" | "black" | "draw" | null = isEnd
         ? result.gameStatus === "checkmate"
           ? appliedTurn === "white"
@@ -1173,7 +1220,7 @@ function BoardContent() {
         const payload: MoveBroadcastPayload = {
           gameId: effectiveGameId,
           moveNumber: newMoveNumber,
-          player: appliedTurn,
+          player: playerThatMoved,
           playerId: currentUserIdRef.current,
           from: result.from,
           to: result.to,
@@ -1235,6 +1282,33 @@ function BoardContent() {
       // committed row showed up, producing the visible undo→redo.
     }
   };
+
+  const handleMoveCommitted = useCallback(
+    (result: { fen: string }) => {
+      if (botWaitingForHumanCommitRef.current === result.fen) {
+        botWaitingForHumanCommitRef.current = null;
+        setBotCommitVersion((version) => version + 1);
+      }
+    },
+    [],
+  );
+
+  const handleMoveRejected = useCallback(
+    (result: { reason: string }) => {
+      botWaitingForHumanCommitRef.current = null;
+      expectedFenRef.current = null;
+      expectedTurnRef.current = null;
+      if (clearExpectedTimerRef.current) {
+        window.clearTimeout(clearExpectedTimerRef.current);
+        clearExpectedTimerRef.current = null;
+      }
+      setToast(`Move rejected: ${result.reason}`);
+      if (effectiveGameId) {
+        void loadGameData(effectiveGameId, { resetClocks: false });
+      }
+    },
+    [effectiveGameId, loadGameData],
+  );
 
   const resetGame = async () => {
     // Immediate local reset for responsiveness
@@ -1433,7 +1507,7 @@ function BoardContent() {
   // Do not block the board on non-fatal errors; show inline banners instead
 
   return (
-    <>
+    <ChessLayout variant="game" showHeader={false}>
       <div className="min-h-screen text-white flex flex-col pb-12 overflow-x-hidden" style={{ backgroundColor: '#141414' }}>
       <div className="container mx-auto px-4 py-4 flex-0">
         {/* Clean offline status indicator - styled dialog matching theme */}
@@ -1505,11 +1579,9 @@ function BoardContent() {
         )}
       </div>
       <div
-        className={`flex-1 flex items-start justify-center px-4 py-4 overflow-hidden transition-[padding-right] duration-200 ${
-          sidePanelCollapsed ? "md:pr-14" : "md:pr-[20rem]"
-        }`}
+        className="flex-1 flex items-start justify-center px-3 py-4 overflow-x-hidden sm:px-4"
       >
-        <div className="flex w-full max-w-6xl flex-col gap-4 md:flex-row md:items-stretch md:justify-center">
+        <div className="flex w-full max-w-[1180px] flex-col gap-4 lg:flex-row lg:items-start lg:justify-center">
           {/* Main column: toast, draw banner, board with chess.com-style
               player rows directly above and below it. */}
           <div className="board-area-with-panels flex min-w-0 flex-1 flex-col gap-3">
@@ -1542,7 +1614,7 @@ function BoardContent() {
                   <PlayerCard
                     username={
                       botGame && botGame.botSide === topColor
-                        ? `Stockfish · ${botGame.botLevel}`
+                        ? "Stockfish"
                         : profileFor(topColor)?.username ?? null
                     }
                     fullName={profileFor(topColor)?.fullName}
@@ -1572,6 +1644,8 @@ function BoardContent() {
                   gameId={effectiveGameId ?? undefined}
                   fen={gameState.fen}
                   onMove={handleMove}
+                  onMoveCommitted={handleMoveCommitted}
+                  onMoveRejected={handleMoveRejected}
                   disabled={
                     gameState.gameStatus !== "active" ||
                     Boolean(gameOver) ||
@@ -1583,13 +1657,14 @@ function BoardContent() {
                   turn={fenTurn}
                   hideEndScreen={isFixedColorGame}
                   externalLastMove={lastOpponentMove}
+                  currentMoveCount={gameState.moveHistory.length}
                 />
 
                 <div className="w-full">
                   <PlayerCard
                     username={
                       botGame && botGame.botSide === bottomColor
-                        ? `Stockfish · ${botGame.botLevel}`
+                        ? "Stockfish"
                         : profileFor(bottomColor)?.username ?? null
                     }
                     fullName={profileFor(bottomColor)?.fullName}
@@ -1618,24 +1693,21 @@ function BoardContent() {
             </div>
           </div>
 
-          {/* Right sidebar: move history only — player rows now live next
-              to the board, chess.com-style. On md+ this is fixed-pinned
-              to the right edge of the viewport (the main content area
-              reserves matching right padding so the board never sits
-              behind it). Below md it falls back to an inline stacked
-              panel after the board. Collapsible via the header toggle. */}
+          {/* Game dock: move history and actions live beside the board on
+              desktop and below it on mobile. It stays attached to the
+              board instead of becoming a fixed viewport wall. */}
           <aside
-            className={`surface-card flex w-full shrink-0 flex-col overflow-hidden max-h-[80vh] transition-[width] duration-200 md:fixed md:inset-y-0 md:right-0 md:z-20 md:max-h-none md:rounded-none md:border-l ${
-              sidePanelCollapsed ? "md:w-12" : "md:w-80"
+            className={`surface-card flex w-full shrink-0 flex-col overflow-hidden max-h-[80vh] transition-[width] duration-200 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] ${
+              sidePanelCollapsed ? "lg:w-12 lg:self-start lg:min-h-56" : "lg:w-[19rem]"
             }`}
-            style={{ borderLeftColor: "var(--border)" }}
+            style={{ borderColor: "var(--border)" }}
             aria-label="Move history"
           >
             {sidePanelCollapsed ? (
               <button
                 type="button"
                 onClick={toggleSidePanel}
-                className="hidden h-full w-full items-start justify-center pt-3 transition-colors hover:bg-[var(--surface-1)] md:flex"
+                className="hidden h-full w-full items-start justify-center pt-3 transition-colors hover:bg-[var(--surface-1)] lg:flex"
                 aria-label="Expand move history"
                 aria-expanded="false"
                 title="Expand move history"
@@ -1649,7 +1721,7 @@ function BoardContent() {
 
             <div
               className={`min-h-0 flex-1 flex-col ${
-                sidePanelCollapsed ? "flex md:hidden" : "flex"
+                sidePanelCollapsed ? "flex lg:hidden" : "flex"
               }`}
             >
               <div className="min-h-0 flex-1">
@@ -1660,7 +1732,7 @@ function BoardContent() {
                     <button
                       type="button"
                       onClick={toggleSidePanel}
-                      className="hidden h-6 w-6 place-items-center rounded transition-colors hover:bg-[var(--surface-1)] md:grid"
+                      className="hidden h-6 w-6 place-items-center rounded transition-colors hover:bg-[var(--surface-1)] lg:grid"
                       aria-label="Collapse move history"
                       aria-expanded="true"
                       title="Collapse move history"
@@ -1672,6 +1744,65 @@ function BoardContent() {
                     </button>
                   }
                 />
+              </div>
+              <div
+                className="space-y-3 p-3"
+                style={{ borderTop: "1px solid var(--border)" }}
+              >
+                <div
+                  className="text-[11px] font-semibold uppercase tracking-wider"
+                  style={{ color: "var(--text-3)" }}
+                >
+                  Actions
+                </div>
+                {isMultiplayerGame && effectiveGameId && !isGameOver && (
+                  <InGameToolbar
+                    gameId={effectiveGameId}
+                    canResign={true}
+                    canOfferDraw={!drawOfferFromOpponent}
+                    drawOfferPendingByMe={drawOfferFromMe}
+                    onError={(msg) => setToast(msg)}
+                  />
+                )}
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={resetGame}
+                    className="btn-secondary inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    New
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBoardFlipped((value) => !value)}
+                    className="btn-secondary inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" />
+                    Flip
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNavigatorOpen(true)}
+                    className="btn-secondary inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs"
+                  >
+                    <Menu className="h-3.5 w-3.5" />
+                    Menu
+                  </button>
+                </div>
+                {isBotThinking && (
+                  <div
+                    className="rounded-md px-2 py-1.5 text-xs"
+                    style={{
+                      background: "var(--accent-soft)",
+                      color: "var(--text-2)",
+                      border: "1px solid var(--border)",
+                    }}
+                    role="status"
+                  >
+                    Stockfish thinking...
+                  </div>
+                )}
               </div>
             </div>
           </aside>
@@ -1741,14 +1872,14 @@ function BoardContent() {
             myColor={remoteColorFromParticipants}
             opponentUsername={
               botGame
-                ? `Stockfish · ${botGame.botLevel}`
+                ? "Stockfish"
                 : opponentUsername
             }
             gameId={effectiveGameId}
             onDismiss={() => setSkipEndScreen(true)}
           />
         )}
-    </>
+    </ChessLayout>
   );
 }
 

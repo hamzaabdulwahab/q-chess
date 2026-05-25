@@ -67,7 +67,7 @@ export function Clock({
       className={[
         "font-mono text-2xl font-semibold tabular-nums px-3 py-1 rounded-md transition-colors",
         isActive && !isFrozen
-          ? "bg-gray-900 text-white border border-violet-500/60"
+          ? "bg-gray-950 text-white border border-white/60"
           : "bg-gray-800/70 text-gray-300 border border-gray-700",
         isCritical ? "text-red-400 border-red-500/70" : "",
         !isCritical && isLow ? "text-amber-300" : "",

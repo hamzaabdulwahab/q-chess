@@ -4,7 +4,6 @@ import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft,
   ChevronRight,
   RefreshCw,
   Search,
@@ -17,6 +16,7 @@ import {
   type Winner,
 } from "@/components/ArchiveFilters";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { ChessLayout } from "@/components/ChessLayout";
 
 interface Game {
   id: number;
@@ -217,20 +217,10 @@ function ArchivePageContent() {
   }, [games]);
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto w-full max-w-5xl px-4 py-10">
-        {/* Top bar */}
-        <div className="mb-6 flex items-center justify-between">
-          <Link
-            href="/"
-            className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back
-          </Link>
-          <h1 className="text-base font-semibold tracking-tight">
-            Game archive
-          </h1>
+    <ChessLayout
+      title="Archive"
+      subtitle="Review active and completed games."
+      actions={
           <button
             type="button"
             onClick={fetchGames}
@@ -240,8 +230,10 @@ function ArchivePageContent() {
             <RefreshCw
               className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
             />
+            Refresh
           </button>
-        </div>
+      }
+    >
 
         {/* Stats strip */}
         <div className="surface-card mb-5 grid grid-cols-4 divide-x divide-[var(--border)]">
@@ -437,8 +429,7 @@ function ArchivePageContent() {
             })}
           </ul>
         )}
-      </div>
-    </div>
+    </ChessLayout>
   );
 }
 

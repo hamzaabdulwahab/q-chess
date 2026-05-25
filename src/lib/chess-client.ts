@@ -211,8 +211,6 @@ export class ChessClient {
     
     if (!kingSquare) return [];
     
-    console.log(`Debugging check detection: King at ${kingSquare}, turn: ${currentTurn}`);
-    
     const checkingPieces: string[] = [];
     
     // Try a different approach: create a position without the king and see which pieces can move to the king's square
@@ -235,7 +233,6 @@ export class ChessClient {
             });
             
             if (testMove) {
-              console.log(`Piece at ${fromSquare} (${piece.color}${piece.type}) can capture king at ${kingSquare}`);
               checkingPieces.push(fromSquare);
             }
           } catch {
@@ -245,7 +242,6 @@ export class ChessClient {
           // Alternative approach: check if this piece type can theoretically attack the king's square
           if (this.canPieceTypeAttackSquare(piece, fromSquare, kingSquare)) {
             if (!checkingPieces.includes(fromSquare)) {
-              console.log(`Piece type check: ${piece.color}${piece.type} at ${fromSquare} can attack ${kingSquare}`);
               checkingPieces.push(fromSquare);
             }
           }
@@ -253,7 +249,6 @@ export class ChessClient {
       }
     }
     
-    console.log('Final checking pieces found:', checkingPieces);
     return checkingPieces;
   }
 

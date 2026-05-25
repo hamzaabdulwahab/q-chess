@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ChessClient } from "@/lib/chess-client";
 import { soundManager } from "@/lib/sound-manager";
 import { useChessTheme } from "@/lib/theme-context";
@@ -31,6 +31,20 @@ interface ChessBoardProps {
     isCastling?: boolean;
     isPromotion?: boolean;
   }) => void;
+  onMoveCommitted?: (result: {
+    fen: string;
+    from: string;
+    to: string;
+    promotion?: string;
+    clientMoveId: string;
+    expectedPly: number;
+  }) => void;
+  onMoveRejected?: (result: {
+    previousFen: string;
+    from: string;
+    to: string;
+    reason: string;
+  }) => void;
   disabled?: boolean;
   viewMode?: boolean;
   orientation?: "white" | "black";
@@ -44,11 +58,24 @@ interface ChessBoardProps {
   // same slide-in animation we already play for the local user's moves so
   // the player can see what just changed.
   externalLastMove?: { from: string; to: string } | null;
+  currentMoveCount?: number;
 }
 
 interface PieceProps {
   piece: string;
 }
+
+type DragSnapshot = {
+  pointerId: number;
+  from: string;
+  piece: string;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  dragging: boolean;
+  squareSize: number;
+};
 
 const Piece: React.FC<PieceProps> = ({ piece }) => {
   const [imageError, setImageError] = useState(false);
@@ -104,16 +131,10 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
 
   // Handle image loading
   const handleImageLoad = () => {
-    console.log(`✅ Successfully loaded piece image: ${imagePath}`);
     setImageError(false);
   };
 
   const handleImageError = () => {
-    console.error(`❌ Failed to load piece image: ${imagePath}`);
-    if (typeof window !== 'undefined') {
-      console.error(`Full URL attempted: ${window.location.origin}${imagePath}`);
-    }
-    console.log(`💥 Using fallback symbol for ${piece}`);
     setImageError(true);
   };
 
@@ -145,6 +166,7 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
 };
 
 interface SquareProps {
+  square: string;
   rank: number;
   file: number;
   piece?: string | null;
@@ -155,15 +177,20 @@ interface SquareProps {
   isCheck: boolean;
   isCheckingPiece: boolean;
   onClick: () => void;
+  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
   fileLabel?: string | null;
   rankLabel?: string | null;
   // When this square is the destination of a move just played, animateFrom
   // carries the source delta in % units so the piece can slide in from
   // its prior square. Null when no animation is in flight.
   animateFrom?: { dx: string; dy: string } | null;
+  isDraggingSource?: boolean;
+  isDragTarget?: boolean;
+  isLegalDragTarget?: boolean;
 }
 
 const Square: React.FC<SquareProps> = ({
+  square,
   piece,
   isLight,
   isSelected,
@@ -172,9 +199,13 @@ const Square: React.FC<SquareProps> = ({
   isCheck,
   isCheckingPiece,
   onClick,
+  onPointerDown,
   fileLabel,
   rankLabel,
   animateFrom,
+  isDraggingSource = false,
+  isDragTarget = false,
+  isLegalDragTarget = false,
 }) => {
   const [hovered, setHovered] = useState(false);
   const { currentTheme } = useChessTheme();
@@ -227,11 +258,31 @@ const Square: React.FC<SquareProps> = ({
       />,
     );
   }
+  if (isDragTarget) {
+    overlayNodes.push(
+      <div
+        key="drag-target"
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundColor: isLegalDragTarget
+            ? "oklch(0.82 0.11 145 / 0.22)"
+            : "oklch(0.62 0.13 25 / 0.18)",
+          boxShadow: `inset 0 0 0 3px ${
+            isLegalDragTarget
+              ? "oklch(0.82 0.11 145 / 0.78)"
+              : "oklch(0.62 0.13 25 / 0.72)"
+          }`,
+        }}
+      />,
+    );
+  }
 
   return (
     <div
       className={squareClasses}
+      data-square={square}
       onClick={onClick}
+      onPointerDown={onPointerDown}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{ backgroundColor: hovered ? hoverColor : baseColor }}
@@ -247,8 +298,9 @@ const Square: React.FC<SquareProps> = ({
             ? ({
                 "--piece-dx": animateFrom.dx,
                 "--piece-dy": animateFrom.dy,
+                opacity: isDraggingSource ? 0 : 1,
               } as React.CSSProperties)
-            : undefined
+            : ({ opacity: isDraggingSource ? 0 : 1 } as React.CSSProperties)
         }
       >
         {piece && <Piece piece={piece} />}
@@ -315,7 +367,7 @@ const PromotionModal: React.FC<PromotionModalProps> = ({
               <button
                 key={p}
                 onClick={() => onSelect(p)}
-                className="flex flex-col items-center p-3 border-2 border-gray-300 rounded hover:border-violet-500 hover:bg-violet-50 transition-colors"
+                className="flex flex-col items-center p-3 border-2 border-gray-300 rounded hover:border-gray-900 hover:bg-gray-100 transition-colors"
               >
                 <Piece piece={pieceCode} />
                 <span className="text-sm text-black mt-2">{labels[p]}</span>
@@ -338,11 +390,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   gameId,
   fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   onMove,
+  onMoveCommitted,
+  onMoveRejected,
   disabled = false,
   viewMode = false,
   orientation = "white",
+  turn: turnProp,
   hideEndScreen = false,
   externalLastMove = null,
+  currentMoveCount = 0,
 }) => {
   const [chessService, setChessService] = useState<ChessClient>(
     new ChessClient(fen),
@@ -364,7 +420,25 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(
     null,
   );
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<DragSnapshot | null>(null);
+  const [dragState, setDragState] = useState<DragSnapshot | null>(null);
+  const [dragTargetSquare, setDragTargetSquare] = useState<string | null>(null);
+  const suppressClickUntilRef = useRef(0);
+  const moveInFlightRef = useRef(false);
+  const [moveInFlight, setMoveInFlight] = useState(false);
+  const activeTurn = turnProp ?? gameState.turn;
   // Nudge removed in favor of true rotation
+
+  useEffect(() => {
+    moveInFlightRef.current = false;
+    setMoveInFlight(false);
+    setSelectedSquare(null);
+    dragRef.current = null;
+    suppressClickUntilRef.current = 0;
+    setDragState(null);
+    setDragTargetSquare(null);
+  }, [gameId]);
 
   // Initialize chess service when fen changes. Critical: this fires
   // whenever the `fen` prop changes — *including* when the parent echoes
@@ -422,9 +496,96 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setLastMove({ from: externalLastMove.from, to: externalLastMove.to });
   }, [externalLastMove]);
 
+  const isPromotionMove = useCallback(
+    (from: string, to: string): boolean => {
+      const piece = chessService.getPiece(from);
+      if (!piece || piece.charAt(1) !== "P") return false;
+
+      const toRank = parseInt(to.charAt(1));
+      const isWhitePawn = piece.charAt(0) === "w";
+      const reachesPromotionRank =
+        (isWhitePawn && toRank === 8) || (!isWhitePawn && toRank === 1);
+
+      if (!reachesPromotionRank) return false;
+      return chessService.isMoveLegal(from, to, "q");
+    },
+    [chessService],
+  );
+
+  const squareFromPoint = useCallback(
+    (clientX: number, clientY: number): string | null => {
+      const board = boardRef.current;
+      if (!board) return null;
+      const rect = board.getBoundingClientRect();
+      if (
+        clientX < rect.left ||
+        clientX > rect.right ||
+        clientY < rect.top ||
+        clientY > rect.bottom
+      ) {
+        return null;
+      }
+
+      const squareSize = rect.width / 8;
+      const xIndex = Math.min(
+        7,
+        Math.max(0, Math.floor((clientX - rect.left) / squareSize)),
+      );
+      const yIndex = Math.min(
+        7,
+        Math.max(0, Math.floor((clientY - rect.top) / squareSize)),
+      );
+      const file = orientation === "black" ? 7 - xIndex : xIndex;
+      const rank = orientation === "black" ? yIndex : 7 - yIndex;
+      return coordsToSquare(file, rank);
+    },
+    [orientation],
+  );
+
+  const clampDragPointToBoard = useCallback(
+    (clientX: number, clientY: number, squareSize?: number) => {
+      const board = boardRef.current;
+      if (!board) return { x: clientX, y: clientY };
+
+      const rect = board.getBoundingClientRect();
+      const visualHalf = ((squareSize ?? rect.width / 8) * 1.08) / 2;
+      return {
+        x: Math.min(
+          rect.right - visualHalf,
+          Math.max(rect.left + visualHalf, clientX),
+        ),
+        y: Math.min(
+          rect.bottom - visualHalf,
+          Math.max(rect.top + visualHalf, clientY),
+        ),
+      };
+    },
+    [],
+  );
+
+  const canStartPieceDrag = useCallback(
+    (square: string, piece: string | null | undefined) => {
+      if (disabled || moveInFlight || gameState.gameOver) return false;
+      return Boolean(piece && piece[0] === activeTurn.charAt(0));
+    },
+    [activeTurn, disabled, gameState.gameOver, moveInFlight],
+  );
+
+  const isLegalDrop = useCallback(
+    (from: string, to: string | null) => {
+      if (!to || from === to) return false;
+      return isPromotionMove(from, to) || chessService.isMoveLegal(from, to);
+    },
+    [chessService, isPromotionMove],
+  );
+
   const makeMove = useCallback(
     async (from: string, to: string, promotion?: string) => {
       if (gameId) {
+        if (moveInFlightRef.current) {
+          return { success: false, error: "Move already in progress" };
+        }
+
         // First validate the move locally to prevent obvious errors
         const legal = chessService.isMoveLegal(from, to, promotion);
         if (!legal) {
@@ -433,6 +594,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         }
 
         const prevFen = chessService.getFen();
+        const expectedMoveCount = currentMoveCount;
+        const clientMoveId = [
+          gameId,
+          expectedMoveCount + 1,
+          from,
+          to,
+          promotion ?? "",
+          Date.now(),
+        ].join(":");
         const moveDetails = chessService.getMoveDetails(from, to, promotion);
 
         // Apply optimistic update
@@ -441,6 +611,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           soundManager.play("illegal-move");
           return { success: false, error: local.error || "Invalid move" };
         }
+        moveInFlightRef.current = true;
+        setMoveInFlight(true);
+
+        const finishMoveInFlight = () => {
+          moveInFlightRef.current = false;
+          setMoveInFlight(false);
+        };
 
         // Play move sound
         const status = chessService.getGameStatus();
@@ -507,6 +684,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           if (process.env.NODE_ENV === "development") {
             console.warn(`[Move ${from}-${to}] reverting: ${reason}`);
           }
+          finishMoveInFlight();
+          onMoveRejected?.({ previousFen: prevFen, from, to, reason });
           const revertChessService = new ChessClient(prevFen);
           setChessService(revertChessService);
           const revertStatus = revertChessService.getGameStatus();
@@ -536,7 +715,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               cache: "no-store",
-              body: JSON.stringify({ from, to, promotion }),
+              body: JSON.stringify({
+                from,
+                to,
+                promotion,
+                clientMoveId,
+                expectedPly: expectedMoveCount + 1,
+                prevFen,
+              }),
             });
 
             const result = await response.json().catch(() => null);
@@ -549,6 +735,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               // redundant setState + render (the original "undo then
               // redo" stutter). The parent's loadGameData / realtime
               // refresh is the authoritative reconciliation path.
+              finishMoveInFlight();
+              onMoveCommitted?.({
+                fen: chessService.getFen(),
+                from,
+                to,
+                promotion,
+                clientMoveId,
+                expectedPly: expectedMoveCount + 1,
+              });
               return;
             }
 
@@ -655,27 +850,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         return result;
       }
     },
-    [gameId, chessService, onMove],
-  );
-
-  const isPromotionMove = useCallback(
-    (from: string, to: string): boolean => {
-      const piece = chessService.getPiece(from);
-      if (!piece || piece.charAt(1) !== "P") return false; // Not a pawn
-
-      const toRank = parseInt(to.charAt(1));
-      const isWhitePawn = piece.charAt(0) === "w";
-
-      // Check if pawn reaches promotion rank
-      const reachesPromotionRank = (isWhitePawn && toRank === 8) || (!isWhitePawn && toRank === 1);
-      
-      if (!reachesPromotionRank) return false;
-      
-      // Verify this is actually a legal move (including captures)
-      // We need to check with queen promotion as default to validate the move is legal
-      return chessService.isMoveLegal(from, to, "q");
-    },
-    [chessService],
+    [
+      gameId,
+      chessService,
+      currentMoveCount,
+      onMove,
+      onMoveCommitted,
+      onMoveRejected,
+    ],
   );
 
   const handlePromotionSelect = async (piece: string) => {
@@ -695,7 +877,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const handleSquareClick = useCallback(
     async (square: string) => {
-      if (disabled || gameState.gameOver) return;
+      if (Date.now() < suppressClickUntilRef.current) {
+        return;
+      }
+      if (disabled || moveInFlight || gameState.gameOver) return;
 
       const piece = chessService.getPiece(square);
 
@@ -719,7 +904,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               setSelectedSquare(null);
               // Make a regular move (including en passant and castling)
               await makeMove(selectedSquare, square);
-            } else if (piece && piece[0] === gameState.turn.charAt(0)) {
+            } else if (piece && piece[0] === activeTurn.charAt(0)) {
               // Select a new piece of the same color
               setSelectedSquare(square);
             } else {
@@ -729,20 +914,156 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             }
           }
         }
-      } else if (piece && piece[0] === gameState.turn.charAt(0)) {
+      } else if (piece && piece[0] === activeTurn.charAt(0)) {
         // Select a piece
         setSelectedSquare(square);
       }
     },
     [
       selectedSquare,
+      activeTurn,
       gameState,
       chessService,
       disabled,
+      moveInFlight,
       makeMove,
       isPromotionMove,
     ],
   );
+
+  const clearDrag = useCallback(() => {
+    dragRef.current = null;
+    setDragState(null);
+    setDragTargetSquare(null);
+  }, []);
+
+  const finishDragMove = useCallback(
+    async (from: string, to: string | null) => {
+      if (!to || from === to) {
+        clearDrag();
+        return;
+      }
+
+      if (isPromotionMove(from, to)) {
+        setSelectedSquare(null);
+        setPendingMove({ from, to });
+        setShowPromotionModal(true);
+        clearDrag();
+        return;
+      }
+
+      if (chessService.isMoveLegal(from, to)) {
+        setSelectedSquare(null);
+        clearDrag();
+        await makeMove(from, to);
+        return;
+      }
+
+      soundManager.play("illegal-move");
+      setSelectedSquare(null);
+      clearDrag();
+    },
+    [chessService, clearDrag, isPromotionMove, makeMove],
+  );
+
+  const handleSquarePointerDown = useCallback(
+    (square: string, piece: string | null | undefined) =>
+      (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0 && event.pointerType === "mouse") return;
+        if (!canStartPieceDrag(square, piece)) return;
+
+        const board = boardRef.current;
+        if (!board || !piece) return;
+        const rect = board.getBoundingClientRect();
+        const squareSize = rect.width / 8;
+
+        const nextDrag: DragSnapshot = {
+          pointerId: event.pointerId,
+          from: square,
+          piece,
+          startX: event.clientX,
+          startY: event.clientY,
+          x: event.clientX,
+          y: event.clientY,
+          dragging: false,
+          squareSize,
+        };
+
+        dragRef.current = nextDrag;
+        setDragTargetSquare(square);
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      },
+    [canStartPieceDrag],
+  );
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+
+      const deltaX = event.clientX - current.startX;
+      const deltaY = event.clientY - current.startY;
+      const dragging =
+        current.dragging || Math.hypot(deltaX, deltaY) > 4;
+      const clampedPoint = clampDragPointToBoard(
+        event.clientX,
+        event.clientY,
+        current.squareSize,
+      );
+
+      const next: DragSnapshot = {
+        ...current,
+        x: clampedPoint.x,
+        y: clampedPoint.y,
+        dragging,
+      };
+      dragRef.current = next;
+
+      if (dragging) {
+        setDragState(next);
+        setDragTargetSquare(squareFromPoint(event.clientX, event.clientY));
+        event.preventDefault();
+      }
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+
+      const wasDragging = current.dragging || dragState?.dragging;
+      const to = squareFromPoint(event.clientX, event.clientY);
+      suppressClickUntilRef.current = wasDragging ? Date.now() + 120 : 0;
+
+      if (wasDragging) {
+        event.preventDefault();
+        void finishDragMove(current.from, to);
+      } else {
+        clearDrag();
+      }
+    };
+
+    const onPointerCancel = (event: PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      suppressClickUntilRef.current = 0;
+      clearDrag();
+    };
+
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", onPointerUp, { passive: false });
+    window.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+    };
+  }, [
+    clampDragPointToBoard,
+    clearDrag,
+    dragState?.dragging,
+    finishDragMove,
+    squareFromPoint,
+  ]);
 
   const renderBoard = () => {
     const squares = [];
@@ -797,13 +1118,18 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           lastMove && (lastMove.from === square || lastMove.to === square);
         const animateFrom =
           animateTo === square && animateOffset ? animateOffset : null;
+        const isDraggingSource =
+          Boolean(dragState?.dragging) && dragState?.from === square;
+        const isDragTarget = dragTargetSquare === square;
+        const isLegalDragTarget =
+          dragState?.from ? isLegalDrop(dragState.from, square) : false;
         
         // King is in check
         const isCheck =
           gameState.inCheck &&
           piece &&
-          ((piece === "wK" && gameState.turn === "white") ||
-            (piece === "bK" && gameState.turn === "black"));
+          ((piece === "wK" && activeTurn === "white") ||
+            (piece === "bK" && activeTurn === "black"));
         
         // Piece is giving check
         const isCheckingPiece = gameState.inCheck && checkingPieces.includes(square);
@@ -822,6 +1148,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         squares.push(
           <Square
             key={square}
+            square={square}
             rank={rank}
             file={file}
             piece={piece}
@@ -832,9 +1159,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             isCheck={Boolean(isCheck)}
             isCheckingPiece={Boolean(isCheckingPiece)}
             onClick={() => handleSquareClick(square)}
+            onPointerDown={handleSquarePointerDown(square, piece)}
             fileLabel={fileLabel}
             rankLabel={rankLabel}
             animateFrom={animateFrom}
+            isDraggingSource={isDraggingSource}
+            isDragTarget={isDragTarget}
+            isLegalDragTarget={isLegalDragTarget}
           />,
         );
       }
@@ -848,7 +1179,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       {/* Promotion Modal */}
       <PromotionModal
         show={showPromotionModal}
-        color={gameState.turn}
+        color={activeTurn}
         onSelect={handlePromotionSelect}
         onCancel={handlePromotionCancel}
       />
@@ -859,8 +1190,35 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           orientation === "black" ? "board-rotated" : ""
         }`}
       >
-        <div className="chess-board-large">{renderBoard()}</div>
+        <div
+          ref={boardRef}
+          className="chess-board-large"
+          data-active-turn={activeTurn}
+          data-selected-square={selectedSquare ?? ""}
+          data-input-disabled={
+            disabled || moveInFlight || gameState.gameOver ? "true" : "false"
+          }
+        >
+          {renderBoard()}
+        </div>
       </div>
+
+      {dragState?.dragging && (
+        <div
+          className="pointer-events-none fixed z-[70] flex items-center justify-center"
+          style={{
+            left: dragState.x,
+            top: dragState.y,
+            width: dragState.squareSize,
+            height: dragState.squareSize,
+            transform: "translate(-50%, -50%) scale(1.08)",
+            filter: "drop-shadow(0 12px 18px oklch(0 0 0 / 0.45))",
+          }}
+          aria-hidden="true"
+        >
+          <Piece piece={dragState.piece} />
+        </div>
+      )}
 
       {/* End-game modal. Suppressed when the parent (board page) renders its
        * own GameEndScreen driven by server-authoritative status. */}

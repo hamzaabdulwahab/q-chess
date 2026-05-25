@@ -124,17 +124,20 @@ export async function POST(
 
     // Create chess service instance with current position
     const currentFen = (game as unknown as { fen: string }).fen;
+    const currentMoveCount = Number(
+      (game as unknown as { move_count?: number | null }).move_count ??
+        (game as unknown as { totalMoves?: number | null }).totalMoves ??
+        0,
+    );
     const chessService = new ChessService(currentFen);
 
     // Optional idempotency/ordering checks
     if (typeof expectedPly === "number") {
-      const currentHistoryLen = chessService.chess.history().length;
-      if (currentHistoryLen !== expectedPly - 1) {
+      const expectedPreviousMoveCount = expectedPly - 1;
+      if (currentMoveCount !== expectedPreviousMoveCount) {
         return NextResponse.json(
           {
-            error: `Move order conflict: expected ply ${
-              expectedPly - 1
-            }, found ${currentHistoryLen}`,
+            error: `Move order conflict: expected ply ${expectedPreviousMoveCount}, found ${currentMoveCount}`,
           },
           { status: 409 }
         );
@@ -153,7 +156,8 @@ export async function POST(
       from,
       to,
       promotion,
-      user.id
+      user.id,
+      expectedPly,
     );
 
     if (!result.success) {
