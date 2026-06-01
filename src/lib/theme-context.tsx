@@ -263,7 +263,7 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children, gameId }: ThemeProviderProps) {
-  const [currentThemeId, setCurrentThemeId] = useState('autumn');
+  const [currentThemeId, setCurrentThemeId] = useState('green');
   
   // Load theme from localStorage on mount, specific to game or global
   useEffect(() => {
@@ -282,9 +282,9 @@ export function ThemeProvider({ children, gameId }: ThemeProviderProps) {
     if (savedTheme && chessThemes.find(t => t.id === savedTheme)) {
       setCurrentThemeId(savedTheme);
     } else {
-      // If no saved theme for this context, set autumn as default and save it
-      setCurrentThemeId('autumn');
-      localStorage.setItem(themeKey, 'autumn');
+      // If no saved theme for this context, set green as default and save it
+      setCurrentThemeId('green');
+      localStorage.setItem(themeKey, 'green');
     }
   }, [gameId]);
 

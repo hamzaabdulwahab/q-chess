@@ -91,7 +91,6 @@ export function ThemeSelector() {
         className="w-full text-white transition-colors flex items-center justify-center gap-2 hover:opacity-80"
         style={{ 
           backgroundColor: '#1B1B1B',
-          fontFamily: "'Inter', sans-serif",
           fontWeight: 500,
           fontSize: '16px',
           padding: '0.6em 1.2em',

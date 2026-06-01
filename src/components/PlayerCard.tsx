@@ -142,12 +142,12 @@ export function PlayerCard({
           width={28}
           height={28}
           unoptimized
-          className="shrink-0 rounded-md object-cover"
+          className="h-7 w-7 shrink-0 rounded-full object-cover"
           style={{ border: "1px solid var(--border-strong)" }}
         />
       ) : (
         <div
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-semibold"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-semibold"
           style={{
             background: "var(--surface-1)",
             border: "1px solid var(--border-strong)",

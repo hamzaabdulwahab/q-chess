@@ -46,10 +46,7 @@ class ChessSoundManager {
       audio.volume = this.volume;
       audio.preload = "auto";
 
-      // Handle loading errors gracefully
-      audio.addEventListener("error", () => {
-        console.warn(`Failed to load sound: ${filePath}`);
-      });
+      audio.addEventListener("error", () => {});
 
       this.sounds.set(soundType as ChessSoundType, audio);
     });
@@ -97,8 +94,7 @@ class ChessSoundManager {
         this.volume = parseFloat(savedVolume);
         this.updateVolume(this.volume);
       }
-    } catch (error) {
-      console.warn("Failed to load sound preferences:", error);
+    } catch {
     }
   }
 
@@ -106,8 +102,7 @@ class ChessSoundManager {
     try {
       localStorage.setItem("chess-sounds-enabled", this.enabled.toString());
       localStorage.setItem("chess-sounds-volume", this.volume.toString());
-    } catch (error) {
-      console.warn("Failed to save sound preferences:", error);
+    } catch {
     }
   }
 
@@ -129,11 +124,8 @@ class ChessSoundManager {
           // board interaction quiet when that happens; the next gesture
           // will prime the manager via unlock().
         });
-      } catch (error) {
-        console.warn(`Error playing sound ${soundType}:`, error);
+      } catch {
       }
-    } else {
-      console.warn(`Sound not found: ${soundType}`);
     }
   }
 

@@ -15,6 +15,7 @@ import {
   type Category,
   type Winner,
 } from "@/components/ArchiveFilters";
+import { BrandLogo } from "@/components/BrandLogo";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ChessLayout } from "@/components/ChessLayout";
 
@@ -309,9 +310,7 @@ function ArchivePageContent() {
           </div>
         ) : games.length === 0 ? (
           <div className="surface-card flex flex-col items-center justify-center px-6 py-14 text-center">
-            <div className="text-3xl" style={{ color: "var(--text-3)" }}>
-              ♞
-            </div>
+            <BrandLogo />
             <p
               className="mt-3 text-base font-medium"
               style={{ color: "var(--text)" }}

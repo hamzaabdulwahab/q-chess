@@ -34,14 +34,11 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { ThemeProvider } from "@/lib/theme-context";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { soundManager } from "@/lib/sound-manager";
-// no NewGameChoice needed
-// useRouter no longer needed after removing online redirect
-// MemeRotator and YouTubeMiniPlayer removed by request
 import { ChessClient } from "@/lib/chess-client";
 import {
+  ChevronLeft,
+  ChevronRight,
   Menu,
-  PanelRightClose,
-  PanelRightOpen,
   Plus,
   RotateCw,
 } from "lucide-react";
@@ -62,10 +59,6 @@ type MoveRow = {
   is_en_passant?: boolean;
   is_promotion?: boolean;
   created_at?: string | null;
-};
-
-const devLog = (...args: unknown[]) => {
-  void args;
 };
 
 const extractCapturedPieces = (moves: MoveRow[]) => {
@@ -89,7 +82,6 @@ function BoardContent() {
   const gameId = searchParams.get("id");
   const mode = searchParams.get("mode"); // "remote" or null
   const youColorParam = searchParams.get("you") as "white" | "black" | null;
-  // router removed
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -176,30 +168,11 @@ function BoardContent() {
   // State to control navigator visibility (controlled by keyboard shortcut)
   const [navigatorOpen, setNavigatorOpen] = useState(false);
 
-  // Side panel collapse state, persisted across reloads.
-  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false);
+  // Keep the move-history panel collapsed on every fresh page load.
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(true);
   const [boardFlipped, setBoardFlipped] = useState(false);
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("q-chess.sidePanelCollapsed");
-      if (saved === "true") setSidePanelCollapsed(true);
-    } catch {
-      // localStorage may be blocked (incognito, SSR edge case) — non-fatal.
-    }
-  }, []);
   const toggleSidePanel = useCallback(() => {
-    setSidePanelCollapsed((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(
-          "q-chess.sidePanelCollapsed",
-          String(next),
-        );
-      } catch {
-        // non-fatal
-      }
-      return next;
-    });
+    setSidePanelCollapsed((prev) => !prev);
   }, []);
 
   // Global keyboard shortcut for navigator toggle - always active
@@ -239,13 +212,11 @@ function BoardContent() {
     };
   }, [supabase]);
 
-  // Timers removed
   const [gameOver, setGameOver] = useState<null | {
     winner: "white" | "black";
     reason: string;
   }>(null);
-  // Vs Computer removed
-  // no timer hydration needed
+
   // After an optimistic move, we expect the next turn; use this to ignore stale server snapshots
   const expectedTurnRef = useRef<"white" | "black" | null>(null);
   const expectedFenRef = useRef<string | null>(null);
@@ -294,9 +265,6 @@ function BoardContent() {
     try {
       window.history.replaceState({}, "", "/board");
     } catch {}
-
-    // REMOVED: Offline queue hydration - games will be disabled when offline instead
-    // No more complex queue system - ensures database consistency
   }, []);
 
   const loadGameData = useCallback(
@@ -308,18 +276,15 @@ function BoardContent() {
       },
     ) => {
       try {
-        devLog(`Loading game data for ${id}...`);
-  const response = await fetch(`/api/games/${id}`, { cache: 'no-store' });
+        const response = await fetch(`/api/games/${id}`, { cache: "no-store" });
         
         // Check if response is JSON before parsing
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Server returned non-JSON response');
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Server returned non-JSON response");
         }
         
         const data = await response.json();
-
-        devLog(`Game ${id} data response:`, response.status, data);
 
         if (response.ok) {
           const rawMoves: MoveRow[] = (data.game.moves ?? []) as MoveRow[];
@@ -330,9 +295,6 @@ function BoardContent() {
             (data.game.move_count as number) ?? rawMoves.length;
 
           if (newMoveCount < prevMoveCountRef.current) {
-            devLog(
-              `Ignoring stale game snapshot (move_count ${newMoveCount} < seen ${prevMoveCountRef.current})`,
-            );
             setLoading(false);
             return;
           }
@@ -343,7 +305,6 @@ function BoardContent() {
             typeof data.game.fen === "string" &&
             data.game.fen.trim() !== expectedFenRef.current.trim()
           ) {
-            devLog("Ignoring stale initial snapshot (fen)");
             setLoading(false);
             return;
           }
@@ -351,12 +312,6 @@ function BoardContent() {
             expectedTurnRef.current &&
             data.game.current_player !== expectedTurnRef.current
           ) {
-            devLog(
-              "Ignoring stale initial snapshot (turn)",
-              data.game.current_player,
-              "!= expected",
-              expectedTurnRef.current,
-            );
             setLoading(false);
             return;
           }
@@ -439,13 +394,7 @@ function BoardContent() {
             expectedTurnRef.current &&
             data.game.current_player !== expectedTurnRef.current
           ) {
-            devLog(
-              "Ignoring stale game snapshot (turn)",
-              data.game.current_player,
-              "!= expected",
-              expectedTurnRef.current,
-            );
-            return; // don't overwrite local optimistic state
+            return;
           }
           if (
             wasPostMoveReload &&
@@ -453,46 +402,29 @@ function BoardContent() {
             typeof data.game.fen === "string" &&
             data.game.fen.trim() !== expectedFenRef.current.trim()
           ) {
-            devLog("Ignoring stale game snapshot (fen)");
             return;
           }
 
-          devLog("Setting game state:", newGameState);
           setGameState(newGameState);
           // No clocks: just clear local gameOver state on fresh active games
           const isActive = data.game.status === "active";
           if (isActive) setGameOver(null);
           setError(null);
 
-          // Trigger sync after successful game load to ensure any pending moves are synced
-          // REMOVED: No more queue system - games will be disabled when offline instead
-          // setTimeout(() => {
-          //   if (id && Number.isInteger(id)) {
-          //     devLog("Triggering post-load sync for game", id);
-          //     flushQueuedMovesRef.current?.();
-          //   }
-          // }, 500);
         } else {
           // Check if this is an authentication error
           if (response.status === 401) {
-            devLog("Authentication required, redirecting to sign-in");
             window.location.href = `/auth/signin?redirectTo=/board${window.location.search}`;
             return;
           }
           
           // Check if game not found - show professional error instead of alert
           if (response.status === 404) {
-            devLog("Game not found, showing user-friendly message");
-            
             // Professional UX: Show custom dialog instead of browser confirm
             setShowAccessDialog(true);
             return;
           }
           
-          console.warn(
-            "Server load failed; keeping current view and will retry:",
-            data.error,
-          );
           setError(
             "Unable to sync with server. You can continue playing; moves will sync when connection is back.",
           );
@@ -513,7 +445,6 @@ function BoardContent() {
   const createNewGame = useCallback(async () => {
     try {
       setLoading(true);
-      devLog("Creating new game...");
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -529,15 +460,12 @@ function BoardContent() {
       });
       
       // Check if response is JSON before parsing
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Server returned non-JSON response');
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned non-JSON response");
       }
       
       const data = await response.json();
-      devLog(data, "Data");
-
-      devLog("New game response:", response.status, data);
 
       if (response.ok) {
         // Update URL with new game ID
@@ -548,13 +476,14 @@ function BoardContent() {
         } catch {}
         // Load the game data inline to avoid dependency issues
         try {
-          devLog(`Loading game data for ${data.gameId}...`);
-          const gameResponse = await fetch(`/api/games/${data.gameId}`, { cache: 'no-store' });
+          const gameResponse = await fetch(`/api/games/${data.gameId}`, {
+            cache: "no-store",
+          });
           
           // Check if response is JSON before parsing
-          const gameContentType = gameResponse.headers.get('content-type');
-          if (!gameContentType || !gameContentType.includes('application/json')) {
-            throw new Error('Game data response is not JSON');
+          const gameContentType = gameResponse.headers.get("content-type");
+          if (!gameContentType || !gameContentType.includes("application/json")) {
+            throw new Error("Game data response is not JSON");
           }
           
           const gameData = await gameResponse.json();
@@ -583,10 +512,7 @@ function BoardContent() {
             setGameOver(null);
             setError(null);
           } else {
-            console.warn(
-              "Failed to load newly created game, switching to local:",
-              gameData.error,
-            );
+            void gameData;
             startLocalGame();
           }
         } catch (err) {
@@ -596,7 +522,7 @@ function BoardContent() {
           setLoading(false);
         }
       } else {
-        console.warn("Create game failed, switching to local:", data.error);
+        void data;
         startLocalGame();
         setLoading(false);
       }
@@ -615,32 +541,28 @@ function BoardContent() {
 
   const handleReturnHome = useCallback(() => {
     setShowAccessDialog(false);
-    window.location.href = '/';
+    window.location.href = "/";
   }, []);
 
   const loadGame = useCallback(
     async (id: number) => {
       // Validate that id is a valid number
       if (!id || isNaN(id) || !Number.isInteger(id) || id <= 0) {
-        console.warn(`Invalid game ID: ${id}, creating new game`);
         createNewGame();
         return;
       }
 
       try {
         setLoading(true);
-        devLog(`Loading game ${id}...`);
-  const response = await fetch(`/api/games/${id}`, { cache: 'no-store' });
+        const response = await fetch(`/api/games/${id}`, { cache: "no-store" });
         
         // Check if response is JSON before parsing
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Server returned non-JSON response');
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Server returned non-JSON response");
         }
         
         const data = await response.json();
-
-        devLog(`Game ${id} response:`, response.status, data);
 
         if (response.ok) {
           const rawMoves: MoveRow[] = (data.game.moves ?? []) as MoveRow[];
@@ -702,35 +624,27 @@ function BoardContent() {
           prevMoveCountRef.current =
             (data.game.move_count as number) ?? rawMoves.length;
 
-          devLog("Setting game state:", newGameState);
           setGameState(newGameState);
           if (data.game.status === "active") setGameOver(null);
           setError(null);
         } else {
           // Check if this is an authentication error
           if (response.status === 401) {
-            devLog("Authentication required, redirecting to sign-in");
             window.location.href = `/auth/signin?redirectTo=/board${window.location.search}`;
             return;
           }
           
           // Check if game not found - show professional error instead of alert
           if (response.status === 404) {
-            devLog("Game not found, showing user-friendly message");
-            
             // Professional UX: Show custom dialog instead of browser confirm
             setShowAccessDialog(true);
             return;
           }
           
-          // Server failed or game not found -> fallback to local
-          console.warn(
-            `Game ${id} not found or server failed; staying on current view`,
-          );
           setError("Unable to load latest state. Retrying…");
         }
       } catch (err) {
-        console.warn(`Error loading game ${id}; staying on current view:`, err);
+        void err;
         setError(
           "Game disabled while offline. Connect to the internet to play.",
         );
@@ -750,7 +664,6 @@ function BoardContent() {
       if (isValidInteger && !isNaN(parsedGameId) && parsedGameId > 0) {
         loadGame(parsedGameId);
       } else {
-        console.warn(`Invalid game ID in URL: ${gameId}, creating new game`);
         createNewGame();
       }
     } else {
@@ -758,8 +671,6 @@ function BoardContent() {
       createNewGame();
     }
   }, [gameId, createNewGame, loadGame]);
-
-  // Timers removed: no clock storage/hydration
 
   // Authoritative side to move derived from FEN
   const fenTurn: "white" | "black" = React.useMemo(() => {
@@ -1032,8 +943,7 @@ function BoardContent() {
     currentUserIdRef.current = currentUserId;
   }, [currentUserId]);
 
-  // Fetch profiles for participants so we can render avatars / usernames in
-  // the PlayerInfo rows.
+  // Fetch profiles for participants so we can render avatars and usernames.
   useEffect(() => {
     const ids = [participants.whiteUserId, participants.blackUserId].filter(
       (id): id is string => typeof id === "string" && id.length > 0,
@@ -1118,8 +1028,6 @@ function BoardContent() {
     color === "white"
       ? gameState.capturedPieces.black
       : gameState.capturedPieces.white;
-
-  // Timers removed: no ticking, storage, or timeout logic
 
   const handleMove = async (result: {
     success: boolean;
@@ -1248,16 +1156,9 @@ function BoardContent() {
           createdAt: new Date().toISOString(),
         };
         void sendMoveBroadcast(channelRef.current, payload).catch((err) => {
-          if (process.env.NODE_ENV === "development") {
-            console.warn(
-              `[game:${effectiveGameId}] broadcast send failed`,
-              err,
-            );
-          }
+          void err;
         });
       }
-
-      // Vs Computer removed
 
       // If the game ended on this move, surface a local end-state banner.
       // The DB write (status / winner / final FEN) happens atomically inside
@@ -1332,23 +1233,10 @@ function BoardContent() {
       }
       await createNewGame();
     } catch {
-      console.warn("Server reset failed, staying in local mode.");
     }
   };
 
-  // Memes and YouTube UI removed
   const [isOnline, setIsOnline] = useState<boolean>(true);
-  
-  // Removed offline queue system - game will be disabled when offline instead
-  // const [queuedCount, setQueuedCount] = useState<number>(0);
-  // const [conflict, setConflict] = useState<string | null>(null);
-  // const [syncStatus, setSyncStatus] = useState<null | {
-  //   type: "info" | "warn" | "error";
-  //   message: string;
-  // }>(null);
-  // const [syncing, setSyncing] = useState<boolean>(false);
-  // const flushQueuedMovesRef = useRef<() => void>(() => {});
-  // const flushOfflineQueueRef = useRef<() => void>(() => {});
 
   // Track online/offline status for clean game disabling
   useEffect(() => {
@@ -1384,11 +1272,6 @@ function BoardContent() {
       // page reload that pulled it from the DB before the broadcast
       // arrived), ignore.
       if (payload.moveNumber <= prevMoveCountRef.current) {
-        if (process.env.NODE_ENV === "development") {
-          devLog(
-            `[game:${effectiveGameId}] duplicate broadcast ignored (move ${payload.moveNumber} <= seen ${prevMoveCountRef.current})`,
-          );
-        }
         return;
       }
 
@@ -1454,18 +1337,7 @@ function BoardContent() {
         "broadcast",
         { event: MOVE_BROADCAST_EVENT },
         ({ payload }) => {
-          if (process.env.NODE_ENV === "development") {
-            devLog(
-              `[game:${effectiveGameId}] received broadcast`,
-              payload,
-            );
-          }
           if (!isMoveBroadcastPayload(payload)) {
-            if (process.env.NODE_ENV === "development") {
-              console.warn(
-                `[game:${effectiveGameId}] invalid broadcast payload`,
-              );
-            }
             return;
           }
           applyOpponentMove(payload);
@@ -1485,14 +1357,7 @@ function BoardContent() {
           loadGameData(effectiveGameId, { resetClocks: false });
         },
       )
-      .subscribe((status) => {
-        if (process.env.NODE_ENV === "development") {
-          devLog(
-            `[game:${effectiveGameId}] subscription status:`,
-            status,
-          );
-        }
-      });
+      .subscribe();
 
     channelRef.current = channel;
 
@@ -1501,10 +1366,6 @@ function BoardContent() {
       supabase.removeChannel(channel);
     };
   }, [effectiveGameId, loadGameData, supabase, applyOpponentMove]);
-
-  // REMOVED: Complex offline queue system replaced with simple offline game disabling
-  // The game will now be disabled when offline to ensure database consistency
-  // No more complex queue management, sync logic, or partial state management
 
   // Memoize the navigator open change callback to prevent unnecessary re-renders
   const handleNavigatorOpenChange = useCallback((open: boolean) => {
@@ -1548,7 +1409,6 @@ function BoardContent() {
                 <h3 
                   id="offline-title"
                   className="text-lg font-semibold text-white"
-                  style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
                 >
                   Game Disabled - No Internet
                 </h3>
@@ -1559,7 +1419,6 @@ function BoardContent() {
                 <p 
                   id="offline-message"
                   className="text-gray-300 leading-relaxed"
-                  style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
                 >
                   The game is temporarily disabled while offline to ensure your moves are properly saved.
                 </p>
@@ -1567,14 +1426,12 @@ function BoardContent() {
                 <ul className="mt-4 space-y-2">
                   <li 
                     className="text-sm text-gray-400 flex items-start"
-                    style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
                   >
                     <span className="mr-2 text-gray-500">•</span>
                     Connect to the internet to resume playing
                   </li>
                   <li 
                     className="text-sm text-gray-400 flex items-start"
-                    style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
                   >
                     <span className="mr-2 text-gray-500">•</span>
                     Your current game progress is safely preserved
@@ -1586,12 +1443,14 @@ function BoardContent() {
         )}
       </div>
       <div
-        className="flex-1 flex items-start justify-center px-3 py-4 overflow-x-hidden sm:px-4"
+        className={`flex-1 flex items-start justify-center px-3 py-4 overflow-x-hidden transition-[padding] duration-[250ms] ease-out sm:px-4 ${
+          sidePanelCollapsed ? "" : "sm:pr-[296px]"
+        }`}
       >
-        <div className="flex w-full max-w-[1180px] flex-col gap-4 lg:flex-row lg:items-start lg:justify-center">
+        <div className="flex w-full max-w-[1180px] flex-col items-center gap-4 lg:justify-center">
           {/* Main column: toast, draw banner, board with chess.com-style
               player rows directly above and below it. */}
-          <div className="board-area-with-panels flex min-w-0 flex-1 flex-col gap-3">
+          <div className="board-area-with-panels flex w-full min-w-0 flex-1 flex-col items-center gap-3">
             {toast && (
               <div
                 className="rounded-md px-3 py-2 text-sm"
@@ -1604,26 +1463,6 @@ function BoardContent() {
                 role="alert"
               >
                 {toast}
-              </div>
-            )}
-
-            {loading && (
-              <div
-                className="inline-flex w-fit items-center gap-2 rounded-md px-3 py-1.5 text-xs"
-                style={{
-                  background: "var(--surface-1)",
-                  color: "var(--text-2)",
-                  border: "1px solid var(--border)",
-                }}
-                role="status"
-                aria-live="polite"
-              >
-                <span
-                  className="h-1.5 w-1.5 animate-pulse rounded-full"
-                  style={{ background: "var(--accent)" }}
-                  aria-hidden="true"
-                />
-                Syncing game
               </div>
             )}
 
@@ -1721,121 +1560,75 @@ function BoardContent() {
             </div>
           </div>
 
-          {/* Game dock: move history and actions live beside the board on
-              desktop and below it on mobile. It stays attached to the
-              board instead of becoming a fixed viewport wall. */}
-          <aside
-            className={`surface-card flex w-full shrink-0 flex-col overflow-hidden max-h-[80vh] transition-[width] duration-200 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] ${
-              sidePanelCollapsed ? "lg:w-12 lg:self-start lg:min-h-56" : "lg:w-[19rem]"
-            }`}
-            style={{ borderColor: "var(--border)" }}
-            aria-label="Move history"
-          >
-            {sidePanelCollapsed ? (
-              <button
-                type="button"
-                onClick={toggleSidePanel}
-                className="hidden h-full w-full items-start justify-center pt-3 transition-colors hover:bg-[var(--surface-1)] lg:flex"
-                aria-label="Expand move history"
-                aria-expanded="false"
-                title="Expand move history"
-              >
-                <PanelRightOpen
-                  className="h-4 w-4"
-                  style={{ color: "var(--text-2)" }}
-                />
-              </button>
-            ) : null}
-
-            <div
-              className={`min-h-0 flex-1 flex-col ${
-                sidePanelCollapsed ? "flex lg:hidden" : "flex"
-              }`}
-            >
-              <div className="order-last min-h-0 flex-1 lg:order-none">
-                <MoveHistory
-                  moves={moveRecords}
-                  startedAt={gameStartedAt}
-                  headerRightSlot={
-                    <button
-                      type="button"
-                      onClick={toggleSidePanel}
-                      className="hidden h-6 w-6 place-items-center rounded transition-colors hover:bg-[var(--surface-1)] lg:grid"
-                      aria-label="Collapse move history"
-                      aria-expanded="true"
-                      title="Collapse move history"
-                    >
-                      <PanelRightClose
-                        className="h-3.5 w-3.5"
-                        style={{ color: "var(--text-3)" }}
-                      />
-                    </button>
-                  }
-                />
-              </div>
-              <div
-                className="order-first space-y-3 p-3 lg:order-none"
-                style={{ borderTop: "1px solid var(--border)" }}
-              >
-                <div
-                  className="text-[11px] font-semibold uppercase tracking-wider"
-                  style={{ color: "var(--text-3)" }}
-                >
-                  Actions
-                </div>
-                {isMultiplayerGame && effectiveGameId && !isGameOver && (
-                  <InGameToolbar
-                    gameId={effectiveGameId}
-                    canResign={true}
-                    canOfferDraw={!drawOfferFromOpponent}
-                    drawOfferPendingByMe={drawOfferFromMe}
-                    onError={(msg) => setToast(msg)}
-                  />
-                )}
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={resetGame}
-                    className="btn-secondary inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    New
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBoardFlipped((value) => !value)}
-                    className="btn-secondary inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" />
-                    Flip
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNavigatorOpen(true)}
-                    className="btn-secondary inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs"
-                  >
-                    <Menu className="h-3.5 w-3.5" />
-                    Menu
-                  </button>
-                </div>
-                {isBotThinking && (
-                  <div
-                    className="rounded-md px-2 py-1.5 text-xs"
-                    style={{
-                      background: "var(--accent-soft)",
-                      color: "var(--text-2)",
-                      border: "1px solid var(--border)",
-                    }}
-                    role="status"
-                  >
-                    Stockfish thinking...
-                  </div>
-                )}
-              </div>
-            </div>
-          </aside>
         </div>
       </div>
+      <aside
+        className={`fixed bottom-0 right-0 top-0 z-40 flex h-screen min-h-screen w-[280px] flex-col border-l bg-[#111] text-white shadow-2xl transition-transform duration-[250ms] ease-out ${
+          sidePanelCollapsed ? "translate-x-full" : "translate-x-0"
+        }`}
+        style={{ borderColor: "rgba(255,255,255,0.08)" }}
+        aria-label="Move history"
+      >
+        <div className="min-h-0 flex-1">
+          <MoveHistory moves={moveRecords} startedAt={gameStartedAt} />
+        </div>
+        <footer
+          className="shrink-0 space-y-3 border-t border-white/10 bg-[#111] p-3"
+          aria-label="Game actions"
+        >
+          {isMultiplayerGame && effectiveGameId && !isGameOver && (
+            <InGameToolbar
+              gameId={effectiveGameId}
+              canResign={true}
+              canOfferDraw={!drawOfferFromOpponent}
+              drawOfferPendingByMe={drawOfferFromMe}
+              onError={(msg) => setToast(msg)}
+            />
+          )}
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={resetGame}
+              className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full border border-white/15 bg-white/[0.03] px-2 py-2 text-xs font-medium text-gray-100 transition-colors hover:border-white/25 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">New</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBoardFlipped((value) => !value)}
+              className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full border border-white/15 bg-white/[0.03] px-2 py-2 text-xs font-medium text-gray-100 transition-colors hover:border-white/25 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            >
+              <RotateCw className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Flip</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setNavigatorOpen(true)}
+              className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full border border-white/15 bg-white/[0.03] px-2 py-2 text-xs font-medium text-gray-100 transition-colors hover:border-white/25 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            >
+              <Menu className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Menu</span>
+            </button>
+          </div>
+        </footer>
+      </aside>
+      <button
+        type="button"
+        onClick={toggleSidePanel}
+        className={`fixed top-4 z-50 grid h-10 w-7 place-items-center rounded-l-md border-y border-l border-white/10 bg-[#111] text-gray-200 shadow-lg transition-[right,background-color,color] duration-[250ms] ease-out hover:bg-[#1a1a1a] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          sidePanelCollapsed ? "right-0" : "right-[280px]"
+        }`}
+        aria-label={sidePanelCollapsed ? "Open move history" : "Hide move history"}
+        aria-expanded={!sidePanelCollapsed}
+        title={sidePanelCollapsed ? "Open move history" : "Hide move history"}
+      >
+        {sidePanelCollapsed ? (
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        ) : (
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        )}
+      </button>
       </div>
       {/* Slide-out navigator - always mounted but controlled by state */}
       <GameNavigator

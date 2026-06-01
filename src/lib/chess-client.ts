@@ -18,18 +18,6 @@ export class ChessClient {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return moves.map((move: any) => move.to);
     } catch {
-      console.error("Error getting possible moves");
-      return [];
-    }
-  }
-
-  // Get all legal moves with detailed information
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getAllMovesDetailed(): any[] {
-    try {
-      return this.chess.moves({ verbose: true });
-    } catch {
-      console.error("Error getting detailed moves");
       return [];
     }
   }
@@ -126,11 +114,6 @@ export class ChessClient {
     return this.chess.fen();
   }
 
-  // Get PGN string
-  getPgn(): string {
-    return this.chess.pgn();
-  }
-
   // Check if game is over
   isGameOver(): boolean {
     return this.chess.isGameOver();
@@ -151,45 +134,6 @@ export class ChessClient {
       isInCheck: this.chess.inCheck(),
       turn: this.chess.turn() === "w" ? "white" : "black",
     };
-  }
-
-  // Load a position from FEN
-  loadFen(fen: string): boolean {
-    try {
-      this.chess.load(fen);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // Get move history
-  getHistory(): string[] {
-    return this.chess.history();
-  }
-
-  // Get captured pieces
-  getCapturedPieces(): { white: string[]; black: string[] } {
-    const history = this.chess.history({ verbose: true });
-    const captured = { white: [] as string[], black: [] as string[] };
-
-    for (const move of history) {
-      if (move.captured) {
-        if (move.color === "w") {
-          captured.white.push(move.captured);
-        } else {
-          captured.black.push(move.captured);
-        }
-      }
-    }
-
-    return captured;
-  }
-
-  // Undo last move
-  undo(): boolean {
-    const move = this.chess.undo();
-    return move !== null;
   }
 
   // Get piece at square

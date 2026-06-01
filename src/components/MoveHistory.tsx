@@ -15,8 +15,7 @@ interface MoveHistoryProps {
   moves: MoveHistoryEntry[];
   // Used to anchor "time per move" calculations to the start of the game.
   startedAt?: string | null;
-  // Optional slot rendered on the right side of the header — used by the
-  // board page to mount its side-panel collapse toggle.
+  // Optional slot rendered on the right side of the header.
   headerRightSlot?: React.ReactNode;
 }
 
@@ -102,22 +101,17 @@ export function MoveHistory({ moves, startedAt, headerRightSlot }: MoveHistoryPr
   }, [moves.length]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-[#111] text-gray-100">
       <header
-        className="flex items-center justify-between gap-2 px-3 py-2.5"
-        style={{ borderBottom: "1px solid var(--border)" }}
+        className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#111] px-4 py-3"
       >
         <span
-          className="text-[11px] font-semibold uppercase tracking-wider"
-          style={{ color: "var(--text-3)" }}
+          className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400"
         >
-          Moves
+          MOVES
         </span>
         <div className="flex items-center gap-2">
-          <span
-            className="text-[11px] tabular-nums"
-            style={{ color: "var(--text-3)" }}
-          >
+          <span className="text-[11px] tabular-nums text-gray-500">
             {moves.length}
           </span>
           {headerRightSlot}
@@ -126,14 +120,11 @@ export function MoveHistory({ moves, startedAt, headerRightSlot }: MoveHistoryPr
 
       <div
         ref={scrollerRef}
-        className="scrollbar-thin flex-1 overflow-y-auto"
+        className="scrollbar-thin min-h-0 flex-1 overflow-y-auto"
         style={{ scrollBehavior: "smooth" }}
       >
         {rows.length === 0 ? (
-          <div
-            className="px-3 py-6 text-center text-xs"
-            style={{ color: "var(--text-3)" }}
-          >
+          <div className="px-4 py-8 text-center text-xs text-gray-500">
             No moves yet
           </div>
         ) : (
@@ -143,16 +134,13 @@ export function MoveHistory({ moves, startedAt, headerRightSlot }: MoveHistoryPr
               return (
                 <li
                   key={row.fullMove}
-                  className="grid min-h-[28px] grid-cols-[2.25rem_1fr_1fr] items-center gap-2 px-3 py-1.5 transition-colors hover:bg-[var(--surface-1)]"
+                  className="grid min-h-[32px] grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 px-4 py-1.5 transition-colors hover:bg-white/[0.08]"
                   style={{
                     background:
-                      idx % 2 === 0 ? "transparent" : "var(--surface-1)",
+                      idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.03)",
                   }}
                 >
-                  <span
-                    className="text-[11px] tabular-nums"
-                    style={{ color: "var(--text-3)" }}
-                  >
+                  <span className="text-[11px] tabular-nums text-gray-500">
                     {row.fullMove}.
                   </span>
                   <div className="min-w-0">
@@ -161,17 +149,14 @@ export function MoveHistory({ moves, startedAt, headerRightSlot }: MoveHistoryPr
                         className="flex items-baseline gap-1.5 truncate"
                         style={{
                           color: isLastRow && !row.black
-                            ? "var(--accent)"
-                            : "var(--text)",
+                            ? "white"
+                            : "rgb(229 231 235)",
                           fontWeight: isLastRow && !row.black ? 600 : 500,
                         }}
                       >
                         <span className="truncate">{row.white.move_notation}</span>
                         {row.whiteTime && (
-                          <span
-                            className="text-[10px] tabular-nums"
-                            style={{ color: "var(--text-3)" }}
-                          >
+                          <span className="text-[10px] tabular-nums text-gray-500">
                             {row.whiteTime}
                           </span>
                         )}
@@ -184,17 +169,14 @@ export function MoveHistory({ moves, startedAt, headerRightSlot }: MoveHistoryPr
                         className="flex items-baseline gap-1.5 truncate"
                         style={{
                           color: isLastRow
-                            ? "var(--accent)"
-                            : "var(--text)",
+                            ? "white"
+                            : "rgb(229 231 235)",
                           fontWeight: isLastRow ? 600 : 500,
                         }}
                       >
                         <span className="truncate">{row.black.move_notation}</span>
                         {row.blackTime && (
-                          <span
-                            className="text-[10px] tabular-nums"
-                            style={{ color: "var(--text-3)" }}
-                          >
+                          <span className="text-[10px] tabular-nums text-gray-500">
                             {row.blackTime}
                           </span>
                         )}

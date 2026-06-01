@@ -6,6 +6,7 @@ import {
   searchBestMove,
   warmStockfishEngine,
 } from "@/lib/stockfish/engine";
+import { getStockfishSearchContext } from "@/lib/stockfish/search-context";
 import type { BotColorChoice, BotLevel } from "@/lib/stockfish/types";
 
 interface CreateBotGameBody {
@@ -55,8 +56,12 @@ async function recordOpeningBotMove({
   level: BotLevel;
   initialFen: string;
 }) {
-  const { bestmove, spentMs } = await searchBestMove("startpos", level);
   const chess = new Chess(initialFen);
+  const { bestmove, spentMs } = await searchBestMove(
+    "startpos",
+    level,
+    getStockfishSearchContext(chess),
+  );
   const from = bestmove.slice(0, 2);
   const to = bestmove.slice(2, 4);
   const promotion = bestmove.length > 4 ? bestmove.slice(4, 5) : undefined;

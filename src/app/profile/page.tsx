@@ -5,8 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Camera,
-  Eye,
-  EyeOff,
   LogOut,
   Trash2,
 } from "lucide-react";
@@ -29,9 +27,6 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [nameInput, setNameInput] = useState("");
-  const [pw, setPw] = useState("");
-  const [pw2, setPw2] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showGuard, setShowGuard] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -90,21 +85,6 @@ export default function ProfilePage() {
         const json = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(json.error || "Failed to update name");
       }
-
-      if (pw || pw2) {
-        if (pw.length < 8)
-          throw new Error("Password must be at least 8 characters.");
-        if (pw !== pw2) throw new Error("Passwords don't match.");
-        const res2 = await fetch("/api/profile", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password: pw }),
-        });
-        const json2 = await res2.json().catch(() => ({}));
-        if (!res2.ok)
-          throw new Error(json2.error || "Failed to change password");
-      }
-
       if (stagedAvatarRemove) {
         const resDel = await fetch("/api/profile/avatar", { method: "DELETE" });
         const jsonDel = await resDel.json().catch(() => ({}));
@@ -128,8 +108,6 @@ export default function ProfilePage() {
         URL.revokeObjectURL(stagedAvatarPreviewUrl);
         setStagedAvatarPreviewUrl(null);
       }
-      setPw("");
-      setPw2("");
       setShowGuard(false);
       setSuccess("Profile saved.");
     } catch (e) {
@@ -164,11 +142,9 @@ export default function ProfilePage() {
   const isDirty = useMemo(
     () =>
       nameInput.trim() !== initialNameRef.current ||
-      pw.length > 0 ||
-      pw2.length > 0 ||
       stagedAvatarRemove ||
       stagedAvatarFile !== null,
-    [nameInput, pw, pw2, stagedAvatarRemove, stagedAvatarFile],
+    [nameInput, stagedAvatarRemove, stagedAvatarFile],
   );
 
   useEffect(() => {
@@ -369,50 +345,6 @@ export default function ProfilePage() {
                 </div>
               </section>
 
-              <section
-                className="surface-card p-6"
-                style={{ boxShadow: "var(--shadow-sm)" }}
-              >
-                <div
-                  className="mb-4 flex items-center justify-between"
-                  style={{ color: "var(--text-3)" }}
-                >
-                  <div className="text-[11px] font-semibold uppercase tracking-wider">
-                    Password
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="inline-flex items-center gap-1 text-[11px] transition-colors hover:text-[var(--text)]"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-3 w-3" />
-                    ) : (
-                      <Eye className="h-3 w-3" />
-                    )}
-                    {showPassword ? "Hide" : "Show"}
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    className="input"
-                    placeholder="New password (8+ chars)"
-                    value={pw}
-                    onChange={(e) => setPw(e.target.value)}
-                  />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    className="input"
-                    placeholder="Confirm new password"
-                    value={pw2}
-                    onChange={(e) => setPw2(e.target.value)}
-                  />
-                </div>
-                <p className="mt-2 text-xs text-muted">
-                  Leave blank to keep your current password.
-                </p>
-              </section>
 
               {error && (
                 <div

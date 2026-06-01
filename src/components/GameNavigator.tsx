@@ -343,7 +343,6 @@ export function GameNavigator({
         }}
       />
 
-      {/* Invite modals removed; bell dropdown handles invites */}
     </>
   );
 }

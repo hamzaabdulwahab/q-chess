@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { useEffect, useRef, useState } from "react";
 import { CirclePlay, LogOut, UserRound } from "lucide-react";
-// InvitesBell removed
 
 export function FloatingUserMenu() {
   const pathname = usePathname() ?? "";
@@ -16,7 +15,6 @@ export function FloatingUserMenu() {
   const [open, setOpen] = useState(false);
   const SOURCE = "user-menu";
   const rootRef = useRef<HTMLDivElement | null>(null);
-  // no inbox modal here; the bell renders a dropdown list
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -203,9 +201,6 @@ export function FloatingUserMenu() {
           </nav>
         </div>
       </div>
-      {/* Inbox modal removed; invites shown in bell dropdown */}
     </div>
   );
 }
-
-// no default export

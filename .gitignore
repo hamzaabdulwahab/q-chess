@@ -183,3 +183,9 @@ logs
 # runtime directories
 tmp/
 temp/
+
+# tooling / workspace metadata
+.aidesigner/
+.antigravitycli/
+.playwright-mcp/
+

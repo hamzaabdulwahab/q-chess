@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChessClient } from "@/lib/chess-client";
 import { soundManager } from "@/lib/sound-manager";
 import { useChessTheme } from "@/lib/theme-context";
@@ -77,7 +77,7 @@ type DragSnapshot = {
   squareSize: number;
 };
 
-const Piece: React.FC<PieceProps> = ({ piece }) => {
+const Piece = React.memo(function Piece({ piece }: PieceProps) {
   const [imageError, setImageError] = useState(false);
   
   // Map pieces to image filenames (PNG assets in public/pieces)
@@ -140,7 +140,7 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
 
   // Always try to load image first, fallback to symbol if error
   return (
-    <div className="flex items-center justify-center w-full h-full select-none pointer-events-none">
+    <div className="flex h-full w-full touch-none select-none items-center justify-center pointer-events-none">
       {!imageError && imagePath ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -148,22 +148,20 @@ const Piece: React.FC<PieceProps> = ({ piece }) => {
           alt={piece}
           width={97}
           height={97}
-          className="chess-piece-image max-w-full max-h-full object-contain"
+          className="chess-piece-image max-h-full max-w-full touch-none object-contain"
           data-color={piece[0] === "w" ? "white" : "black"}
           draggable={false}
           onError={handleImageError}
           onLoad={handleImageLoad}
         />
       ) : (
-        <div
-          className={`chess-piece-fallback font-bold text-4xl ${color}`}
-        >
+        <div className={`chess-piece-fallback touch-none text-4xl font-bold ${color}`}>
           {pieceSymbols[piece] || ""}
         </div>
       )}
     </div>
   );
-};
+});
 
 interface SquareProps {
   square: string;
@@ -176,8 +174,12 @@ interface SquareProps {
   isLastMove: boolean;
   isCheck: boolean;
   isCheckingPiece: boolean;
-  onClick: () => void;
-  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onSquareClick: (square: string) => void;
+  onSquarePointerDown: (
+    square: string,
+    piece: string | null | undefined,
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => void;
   fileLabel?: string | null;
   rankLabel?: string | null;
   // When this square is the destination of a move just played, animateFrom
@@ -189,7 +191,7 @@ interface SquareProps {
   isLegalDragTarget?: boolean;
 }
 
-const Square: React.FC<SquareProps> = ({
+const Square = React.memo(function Square({
   square,
   piece,
   isLight,
@@ -198,15 +200,15 @@ const Square: React.FC<SquareProps> = ({
   isLastMove,
   isCheck,
   isCheckingPiece,
-  onClick,
-  onPointerDown,
+  onSquareClick,
+  onSquarePointerDown,
   fileLabel,
   rankLabel,
   animateFrom,
   isDraggingSource = false,
   isDragTarget = false,
   isLegalDragTarget = false,
-}) => {
+}: SquareProps) {
   const [hovered, setHovered] = useState(false);
   const { currentTheme } = useChessTheme();
 
@@ -281,11 +283,14 @@ const Square: React.FC<SquareProps> = ({
     <div
       className={squareClasses}
       data-square={square}
-      onClick={onClick}
-      onPointerDown={onPointerDown}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{ backgroundColor: hovered ? hoverColor : baseColor }}
+      onClick={() => onSquareClick(square)}
+      onPointerDown={(event) => onSquarePointerDown(square, piece, event)}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      style={{
+        backgroundColor: hovered ? hoverColor : baseColor,
+        touchAction: piece ? "none" : "auto",
+      }}
     >
       {overlayNodes}
       <div
@@ -327,9 +332,7 @@ const Square: React.FC<SquareProps> = ({
       )}
     </div>
   );
-};
-
-// (Duplicate Square implementation removed above)
+});
 
 interface PromotionModalProps {
   show: boolean;
@@ -422,13 +425,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   );
   const boardRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragSnapshot | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
+  const pendingDragRenderRef = useRef<{
+    snapshot: DragSnapshot;
+    targetSquare: string | null;
+  } | null>(null);
   const [dragState, setDragState] = useState<DragSnapshot | null>(null);
   const [dragTargetSquare, setDragTargetSquare] = useState<string | null>(null);
   const suppressClickUntilRef = useRef(0);
   const moveInFlightRef = useRef(false);
   const [moveInFlight, setMoveInFlight] = useState(false);
   const activeTurn = turnProp ?? gameState.turn;
-  // Nudge removed in favor of true rotation
 
   useEffect(() => {
     moveInFlightRef.current = false;
@@ -436,6 +443,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setSelectedSquare(null);
     dragRef.current = null;
     suppressClickUntilRef.current = 0;
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    pendingDragRenderRef.current = null;
     setDragState(null);
     setDragTargetSquare(null);
   }, [gameId]);
@@ -571,13 +583,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     [activeTurn, disabled, gameState.gameOver, moveInFlight],
   );
 
-  const isLegalDrop = useCallback(
-    (from: string, to: string | null) => {
-      if (!to || from === to) return false;
-      return isPromotionMove(from, to) || chessService.isMoveLegal(from, to);
-    },
-    [chessService, isPromotionMove],
-  );
+  const selectedLegalTargets = useMemo(() => {
+    if (!selectedSquare) return new Set<string>();
+    return new Set(chessService.getPossibleMoves(selectedSquare));
+  }, [chessService, selectedSquare]);
+
+  const dragLegalTargets = useMemo(() => {
+    if (!dragState?.from) return new Set<string>();
+    return new Set(chessService.getPossibleMoves(dragState.from));
+  }, [chessService, dragState?.from]);
 
   const makeMove = useCallback(
     async (from: string, to: string, promotion?: string) => {
@@ -681,9 +695,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         // revert to `prevFen` so the board never silently diverges from
         // what the server has.
         const revert = (reason: string) => {
-          if (process.env.NODE_ENV === "development") {
-            console.warn(`[Move ${from}-${to}] reverting: ${reason}`);
-          }
           finishMoveInFlight();
           onMoveRejected?.({ previousFen: prevFen, from, to, reason });
           const revertChessService = new ChessClient(prevFen);
@@ -824,9 +835,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           });
           setLastMove({ from, to });
 
-          // REMOVED: Offline queue logic - local games are now purely local
-          // No more complex queue management for offline synchronization
-
           if (onMove) {
             onMove({
               success: true,
@@ -931,11 +939,42 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     ],
   );
 
+  const cancelDragFrame = useCallback(() => {
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    pendingDragRenderRef.current = null;
+  }, []);
+
+  const scheduleDragRender = useCallback(
+    (snapshot: DragSnapshot, targetSquare: string | null) => {
+      pendingDragRenderRef.current = { snapshot, targetSquare };
+      if (dragFrameRef.current !== null) return;
+
+      dragFrameRef.current = window.requestAnimationFrame(() => {
+        dragFrameRef.current = null;
+        const pending = pendingDragRenderRef.current;
+        pendingDragRenderRef.current = null;
+        if (!pending) return;
+
+        setDragState(pending.snapshot);
+        setDragTargetSquare((current) =>
+          current === pending.targetSquare ? current : pending.targetSquare,
+        );
+      });
+    },
+    [],
+  );
+
   const clearDrag = useCallback(() => {
+    cancelDragFrame();
     dragRef.current = null;
     setDragState(null);
     setDragTargetSquare(null);
-  }, []);
+  }, [cancelDragFrame]);
+
+  useEffect(() => cancelDragFrame, [cancelDragFrame]);
 
   const finishDragMove = useCallback(
     async (from: string, to: string | null) => {
@@ -967,32 +1006,35 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   );
 
   const handleSquarePointerDown = useCallback(
-    (square: string, piece: string | null | undefined) =>
-      (event: React.PointerEvent<HTMLDivElement>) => {
-        if (event.button !== 0 && event.pointerType === "mouse") return;
-        if (!canStartPieceDrag(square, piece)) return;
+    (
+      square: string,
+      piece: string | null | undefined,
+      event: React.PointerEvent<HTMLDivElement>,
+    ) => {
+      if (event.button !== 0 && event.pointerType === "mouse") return;
+      if (!canStartPieceDrag(square, piece)) return;
 
-        const board = boardRef.current;
-        if (!board || !piece) return;
-        const rect = board.getBoundingClientRect();
-        const squareSize = rect.width / 8;
+      const board = boardRef.current;
+      if (!board || !piece) return;
+      const rect = board.getBoundingClientRect();
+      const squareSize = rect.width / 8;
 
-        const nextDrag: DragSnapshot = {
-          pointerId: event.pointerId,
-          from: square,
-          piece,
-          startX: event.clientX,
-          startY: event.clientY,
-          x: event.clientX,
-          y: event.clientY,
-          dragging: false,
-          squareSize,
-        };
+      const nextDrag: DragSnapshot = {
+        pointerId: event.pointerId,
+        from: square,
+        piece,
+        startX: event.clientX,
+        startY: event.clientY,
+        x: event.clientX,
+        y: event.clientY,
+        dragging: false,
+        squareSize,
+      };
 
-        dragRef.current = nextDrag;
-        setDragTargetSquare(square);
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-      },
+      dragRef.current = nextDrag;
+      setDragTargetSquare(square);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    },
     [canStartPieceDrag],
   );
 
@@ -1020,8 +1062,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       dragRef.current = next;
 
       if (dragging) {
-        setDragState(next);
-        setDragTargetSquare(squareFromPoint(event.clientX, event.clientY));
+        scheduleDragRender(
+          next,
+          squareFromPoint(event.clientX, event.clientY),
+        );
         event.preventDefault();
       }
     };
@@ -1030,7 +1074,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       const current = dragRef.current;
       if (!current || current.pointerId !== event.pointerId) return;
 
-      const wasDragging = current.dragging || dragState?.dragging;
+      const wasDragging = current.dragging;
       const to = squareFromPoint(event.clientX, event.clientY);
       suppressClickUntilRef.current = wasDragging ? Date.now() + 120 : 0;
 
@@ -1060,8 +1104,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   }, [
     clampDragPointToBoard,
     clearDrag,
-    dragState?.dragging,
     finishDragMove,
+    scheduleDragRender,
     squareFromPoint,
   ]);
 
@@ -1110,9 +1154,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         // h1 (file=7, rank=0) is light — "white square on white's right".
         const isLight = (rank + file) % 2 === 1;
         const isSelected = selectedSquare === square;
-
-        // Remove move highlighting functionality - always false
-        const isHighlighted = false;
+        const isHighlighted = selectedLegalTargets.has(square);
 
         const isLastMove =
           lastMove && (lastMove.from === square || lastMove.to === square);
@@ -1121,8 +1163,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const isDraggingSource =
           Boolean(dragState?.dragging) && dragState?.from === square;
         const isDragTarget = dragTargetSquare === square;
-        const isLegalDragTarget =
-          dragState?.from ? isLegalDrop(dragState.from, square) : false;
+        const isLegalDragTarget = dragLegalTargets.has(square);
         
         // King is in check
         const isCheck =
@@ -1158,8 +1199,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             isLastMove={Boolean(isLastMove)}
             isCheck={Boolean(isCheck)}
             isCheckingPiece={Boolean(isCheckingPiece)}
-            onClick={() => handleSquareClick(square)}
-            onPointerDown={handleSquarePointerDown(square, piece)}
+            onSquareClick={handleSquareClick}
+            onSquarePointerDown={handleSquarePointerDown}
             fileLabel={fileLabel}
             rankLabel={rankLabel}
             animateFrom={animateFrom}
@@ -1205,14 +1246,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
       {dragState?.dragging && (
         <div
-          className="pointer-events-none fixed z-[70] flex items-center justify-center"
+          className="pointer-events-none fixed left-0 top-0 z-[70] flex items-center justify-center"
           style={{
-            left: dragState.x,
-            top: dragState.y,
             width: dragState.squareSize,
             height: dragState.squareSize,
-            transform: "translate(-50%, -50%) scale(1.08)",
+            transform: `translate3d(${dragState.x}px, ${dragState.y}px, 0) translate(-50%, -50%) scale(1.08)`,
             filter: "drop-shadow(0 12px 18px oklch(0 0 0 / 0.45))",
+            willChange: "transform",
           }}
           aria-hidden="true"
         >

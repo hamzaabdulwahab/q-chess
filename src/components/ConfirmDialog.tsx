@@ -86,7 +86,6 @@ export function ConfirmDialog({
           <h3 
             id="dialog-title"
             className="text-lg font-semibold text-white"
-            style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
           >
             {title}
           </h3>
@@ -97,7 +96,6 @@ export function ConfirmDialog({
           <p 
             id="dialog-message"
             className="text-gray-300 leading-relaxed"
-            style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
           >
             {message}
           </p>
@@ -108,7 +106,6 @@ export function ConfirmDialog({
                 <li 
                   key={index}
                   className="text-sm text-gray-400 flex items-start"
-                  style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
                 >
                   <span className="mr-2 text-gray-500">•</span>
                   {detail}
@@ -128,7 +125,6 @@ export function ConfirmDialog({
               backgroundColor: 'transparent',
               borderColor: '#4a4a4a',
               color: '#d1d5db',
-              fontFamily: 'Inter, system-ui, sans-serif'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = '#2a2a2a';
@@ -152,7 +148,6 @@ export function ConfirmDialog({
               backgroundImage: 'none',
               color: 'var(--accent-fg)',
               border: '1px solid transparent',
-              fontFamily: 'Inter, system-ui, sans-serif',
               fontWeight: 500
             }}
             onMouseEnter={(e) => {

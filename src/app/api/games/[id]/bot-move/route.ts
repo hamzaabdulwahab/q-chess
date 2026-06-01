@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Chess, type Move } from "chess.js";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { searchBestMove } from "@/lib/stockfish/engine";
+import { getStockfishSearchContext } from "@/lib/stockfish/search-context";
 import { isBotLevel } from "@/lib/stockfish/types";
 import { checkBotMoveRateLimit } from "@/lib/stockfish/rate-limit";
 
@@ -156,6 +157,7 @@ export async function POST(
     const { bestmove, spentMs } = await searchBestMove(
       positionDirective,
       level,
+      getStockfishSearchContext(chess),
     );
 
     // ── Validate engine's move against chess.js. Defence in depth: if

@@ -26,6 +26,7 @@ import {
 } from "node:child_process";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
+import type { StockfishSearchContext } from "./search-context";
 import type { BotLevel } from "./types";
 
 interface EngineProcess {
@@ -52,6 +53,8 @@ if (!globalAny[globalKey]) {
   };
 }
 const engineGlobals: EngineGlobals = globalAny[globalKey];
+const STOCKFISH_HARD_CAP_MS = 1500;
+const STOCKFISH_MOVETIME_CAP_MS = 1300;
 
 function getLineListeners(state: EngineProcess): Set<(line: string) => void> {
   return state.listeners;
@@ -115,11 +118,8 @@ async function startEngine(): Promise<EngineProcess> {
     console.error("[stockfish stderr]", chunk.toString().trim());
   });
 
-  child.on("exit", (code) => {
+  child.on("exit", () => {
     state.alive = false;
-    if (process.env.NODE_ENV === "development") {
-      console.warn(`[stockfish] engine exited with code ${code ?? "?"}`);
-    }
     if (engineGlobals.enginePromise) engineGlobals.enginePromise = null;
   });
 
@@ -269,6 +269,20 @@ function levelConfig(level: BotLevel): LevelConfig {
   }
 }
 
+function resolveAdaptiveDepth(context?: StockfishSearchContext): number {
+  if (!context) return 10;
+
+  const isEndgame = context.pieceCount <= 12;
+  const isComplex = context.legalMoveCount > 20 || isEndgame;
+  if (isComplex) return isEndgame ? 16 : 14;
+
+  return context.fullMoveNumber <= 12 ? 8 : 10;
+}
+
+function resolveMovetimeMs(baseMs: number): number {
+  return Math.max(100, Math.min(baseMs, STOCKFISH_MOVETIME_CAP_MS));
+}
+
 interface SearchResult {
   /** Best move in UCI long-algebraic, e.g. "e2e4", "e7e8q". */
   bestmove: string;
@@ -291,14 +305,20 @@ interface SearchResult {
 export async function searchBestMove(
   positionSpec: string,
   level: BotLevel,
+  context?: StockfishSearchContext,
 ): Promise<SearchResult> {
   const run = async (): Promise<SearchResult> => {
     const cfg = levelConfig(level);
+    const depth = resolveAdaptiveDepth(context);
+    const movetimeMs = resolveMovetimeMs(cfg.movetimeMs);
     const engine = await getEngine();
     if (!engine.alive) {
       engineGlobals.enginePromise = null;
       return run();
     }
+
+    engine.child.stdin.write("stop\n");
+    await sendAndWaitForLine(engine, "isready", "readyok", 10_000);
 
     // Per-search options first, since strength options must be set before
     // the search begins.
@@ -312,17 +332,15 @@ export async function searchBestMove(
     const positionCommand = `position ${positionSpec}`;
 
     // Build a search promise that resolves on the "bestmove" line. The
-    // total time we allow is movetime plus a generous buffer for engine
-    // latency and parsing.
-    const envBuffer = Number(process.env.STOCKFISH_REQUEST_TIMEOUT_MS);
-    const buffer =
-      Number.isFinite(envBuffer) && envBuffer > 0 ? envBuffer : 4000;
-    const timeoutMs = cfg.movetimeMs + buffer;
+    // engine receives both an adaptive depth target and a short movetime;
+    // the timeout is a hard backstop that sends `stop` before failing.
+    const timeoutMs = STOCKFISH_HARD_CAP_MS;
     const start = Date.now();
     const listeners = getLineListeners(engine);
     const result = await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
         listeners.delete(handler);
+        engine.child.stdin.write("stop\n");
         reject(new Error("Engine search timed out"));
       }, timeoutMs);
       const handler = (line: string) => {
@@ -337,7 +355,7 @@ export async function searchBestMove(
       listeners.add(handler);
       engine.child.stdin.write("ucinewgame\n");
       engine.child.stdin.write(positionCommand + "\n");
-      engine.child.stdin.write(`go movetime ${cfg.movetimeMs}\n`);
+      engine.child.stdin.write(`go depth ${depth} movetime ${movetimeMs}\n`);
     });
 
     if (!result || result === "(none)" || result === "0000") {
@@ -346,6 +364,14 @@ export async function searchBestMove(
 
     return { bestmove: result, spentMs: Date.now() - start };
   };
+
+  if (engineGlobals.enginePromise) {
+    void engineGlobals.enginePromise.then((engine) => {
+      if (engine.alive) {
+        engine.child.stdin.write("stop\n");
+      }
+    }).catch(() => undefined);
+  }
 
   const current = engineGlobals.queue.then(run);
   // Never let a failed search poison the queue.

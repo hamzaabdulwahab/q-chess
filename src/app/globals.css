@@ -5,9 +5,13 @@
  * inverted white-on-black: the primary action button is near-white, text
  * on it is near-black. Colour appears only where information demands it:
  * destructive actions (muted red) and time-pressure warnings on the clock
- * (muted yellow to red gradient). Reference family Inter; system fallback.
+ * (muted yellow to red gradient).
  */
 :root {
+  --font-sans: var(--font-geist-sans, "Geist Sans"), Inter, ui-sans-serif,
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
   --bg:            oklch(0.135 0.003 250);   /* page background */
   --sidebar:       oklch(0.105 0.003 250);   /* app navigation shell */
   --surface:       oklch(0.17 0.003 250);    /* primary panel */
@@ -54,21 +58,18 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI",
-    system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11", "cv05";
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 /* Typography helpers */
-.heading {
-  font-family: var(--font-heading), var(--font-inter), var(--font-poppins), system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
-  letter-spacing: 0.2px;
-}
-
+.heading,
 .heading-sub {
-  font-family: var(--font-heading), var(--font-inter), var(--font-poppins), system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
+  font-family: var(--font-sans);
+  letter-spacing: 0;
 }
 
 /* App containers */
@@ -113,10 +114,10 @@ body {
 
 /* Dropdown typography (profile menu) */
 .dropdown-typography {
-  font-family: var(--font-inter), var(--font-poppins), system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
+  font-family: var(--font-sans);
   font-size: 14px;
   /* comfortable touch targets */
-  letter-spacing: 0.1px;
+  letter-spacing: 0;
   /* subtle */
   line-height: 1.4;
 }
@@ -523,8 +524,6 @@ body {
   transition: transform var(--board-flip-duration) var(--board-flip-ease);
   will-change: transform;
 }
-
-/* (premium board styles removed per request) */
 
 /* Chess piece image styling (responsive) */
 .chess-piece-image {

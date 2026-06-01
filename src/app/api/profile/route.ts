@@ -64,17 +64,11 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: upErr.message }, { status: 400 });
   }
 
-  if (body.password) {
-    const pw: string = String(body.password);
-    if (pw.length < 8)
-      return NextResponse.json(
-        { error: "Password too short" },
-        { status: 400 }
-      );
-    // Change password via auth API
-    const { error: pwErr } = await supabase.auth.updateUser({ password: pw });
-    if (pwErr)
-      return NextResponse.json({ error: pwErr.message }, { status: 400 });
+  if ("password" in body) {
+    return NextResponse.json(
+      { error: "Password changes are disabled for Google-only accounts" },
+      { status: 400 },
+    );
   }
 
   return NextResponse.json({ ok: true });
