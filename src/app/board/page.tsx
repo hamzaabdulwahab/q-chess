@@ -1376,8 +1376,8 @@ function BoardContent() {
 
   return (
     <ChessLayout variant="game" showHeader={false}>
-      <div className="min-h-screen text-white flex flex-col pb-12 overflow-x-hidden" style={{ backgroundColor: '#141414' }}>
-      <div className="container mx-auto px-4 py-4 flex-0">
+      <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-x-hidden pb-12 text-white md:min-h-screen" style={{ backgroundColor: '#141414' }}>
+      <div className="container mx-auto flex-0 px-2 py-2 sm:px-4 sm:py-4">
         {/* Clean offline status indicator - styled dialog matching theme */}
         <div className="mb-2 flex items-center gap-3 text-sm text-gray-300">
           {error && (
@@ -1563,10 +1563,14 @@ function BoardContent() {
         </div>
       </div>
       <aside
-        className={`fixed bottom-0 right-0 top-0 z-40 flex h-screen min-h-screen w-[280px] flex-col border-l bg-[#111] text-white shadow-2xl transition-transform duration-[250ms] ease-out ${
+        className={`fixed bottom-0 right-0 top-14 z-40 flex flex-col overflow-hidden border-l bg-[#111] text-white shadow-2xl transition-transform duration-[250ms] ease-out md:top-0 ${
           sidePanelCollapsed ? "translate-x-full" : "translate-x-0"
         }`}
-        style={{ borderColor: "rgba(255,255,255,0.08)" }}
+        style={{
+          borderColor: "rgba(255,255,255,0.08)",
+          overscrollBehavior: "contain",
+          width: "min(82vw, 280px)",
+        }}
         aria-label="Move history"
       >
         <div className="min-h-0 flex-1">
@@ -1616,9 +1620,10 @@ function BoardContent() {
       <button
         type="button"
         onClick={toggleSidePanel}
-        className={`fixed top-4 z-50 grid h-10 w-7 place-items-center rounded-l-md border-y border-l border-white/10 bg-[#111] text-gray-200 shadow-lg transition-[right,background-color,color] duration-[250ms] ease-out hover:bg-[#1a1a1a] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-          sidePanelCollapsed ? "right-0" : "right-[280px]"
+        className={`fixed top-16 z-50 grid h-10 w-7 place-items-center rounded-l-md border-y border-l border-white/10 bg-[#111] text-gray-200 shadow-lg transition-[right,background-color,color,opacity] duration-[250ms] ease-out hover:bg-[#1a1a1a] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 md:top-4 ${
+          navigatorOpen ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
+        style={{ right: sidePanelCollapsed ? 0 : "min(82vw, 280px)" }}
         aria-label={sidePanelCollapsed ? "Open move history" : "Hide move history"}
         aria-expanded={!sidePanelCollapsed}
         title={sidePanelCollapsed ? "Open move history" : "Hide move history"}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureProfileForUser } from "@/lib/ensure-profile";
 import { getSupabaseServer } from "@/lib/supabase-server";
 
 export async function POST(req: Request) {
@@ -18,55 +19,7 @@ export async function POST(req: Request) {
       if (typeof body?.username === "string" && body.username)
         desired = body.username;
     } catch {}
-    if (!desired) {
-      const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
-      desired =
-        (typeof meta.username === "string" && meta.username) ||
-        user.email?.split("@")[0] ||
-        "user";
-    }
-
-    const { data: prof, error: selErr } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (selErr)
-      return NextResponse.json(
-        { error: (selErr as { message: string }).message },
-        { status: 500 }
-      );
-    if (prof) return NextResponse.json({ ok: true });
-
-    // Try insert; if username collision, retry with random suffix a few times
-    let ok = false;
-    for (let i = 0; i < 5; i++) {
-      const candidate =
-        i === 0 ? desired : `${desired}${Math.floor(Math.random() * 10000)}`;
-      const { error: insErr } = await supabase
-        .from("profiles")
-        .insert({ id: user.id, username: candidate });
-      if (!insErr) {
-        ok = true;
-        break;
-      }
-      // If conflict on id, treat as success; if on username, retry
-      const code = (insErr as unknown as { code?: string }).code;
-      if (code === "23505") {
-        continue;
-      } else {
-        return NextResponse.json(
-          { error: (insErr as { message: string }).message },
-          { status: 500 }
-        );
-      }
-    }
-    if (!ok)
-      return NextResponse.json(
-        { error: "Username already taken" },
-        { status: 409 }
-      );
-
+    await ensureProfileForUser(supabase, user, desired);
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const message =

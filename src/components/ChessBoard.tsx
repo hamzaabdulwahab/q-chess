@@ -480,13 +480,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           : null,
       skipEndScreen: false, // Always show end screen for completed games
     });
-    // Play game start sound for new games (starting position)
-    if (
-      fen === "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" &&
-      !viewMode
-    ) {
-      soundManager.play("game-start");
-    }
     // chessService is intentionally excluded: the effect replaces it,
     // and including it would loop forever.
     // eslint-disable-next-line react-hooks/exhaustive-deps

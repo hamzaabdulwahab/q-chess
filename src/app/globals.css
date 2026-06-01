@@ -479,29 +479,29 @@ body {
 @media (max-width: 767px) {
   .board-area-with-panels .chess-board-large,
   .board-area-with-panels .board-orient {
-    width: min(calc(100vw - 1.5rem), 68dvh);
-    height: min(calc(100vw - 1.5rem), 68dvh);
+    width: min(calc(100vw - 1rem), 62dvh);
+    height: min(calc(100vw - 1rem), 62dvh);
     max-width: calc(100vw - 1.5rem);
-    max-height: 68dvh;
+    max-height: 62dvh;
   }
 
   .board-area-with-panels .board-stack {
-    width: min(calc(100vw - 1.5rem), 68dvh);
+    width: min(calc(100vw - 1rem), 62dvh);
     max-width: calc(100vw - 1.5rem);
   }
 
   .board-area-with-panels .chess-square-large {
-    width: calc(min(calc(100vw - 1.5rem), 68dvh) / 8);
-    height: calc(min(calc(100vw - 1.5rem), 68dvh) / 8);
-    max-width: calc(min(calc(100vw - 1.5rem), 68dvh) / 8);
-    max-height: calc(min(calc(100vw - 1.5rem), 68dvh) / 8);
+    width: calc(min(calc(100vw - 1rem), 62dvh) / 8);
+    height: calc(min(calc(100vw - 1rem), 62dvh) / 8);
+    max-width: calc(min(calc(100vw - 1rem), 62dvh) / 8);
+    max-height: calc(min(calc(100vw - 1rem), 62dvh) / 8);
   }
 
   .board-area-with-panels .chess-piece-image {
-    width: calc(min(calc(100vw - 1.5rem), 68dvh) / 8 * 1.02);
-    height: calc(min(calc(100vw - 1.5rem), 68dvh) / 8 * 1.02);
-    max-width: calc(min(calc(100vw - 1.5rem), 68dvh) / 8 * 1.02);
-    max-height: calc(min(calc(100vw - 1.5rem), 68dvh) / 8 * 1.02);
+    width: calc(min(calc(100vw - 1rem), 62dvh) / 8 * 1.02);
+    height: calc(min(calc(100vw - 1rem), 62dvh) / 8 * 1.02);
+    max-width: calc(min(calc(100vw - 1rem), 62dvh) / 8 * 1.02);
+    max-height: calc(min(calc(100vw - 1rem), 62dvh) / 8 * 1.02);
   }
 }
 

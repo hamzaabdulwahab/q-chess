@@ -92,6 +92,7 @@ function buildRows(
 export function MoveHistory({ moves, startedAt, headerRightSlot }: MoveHistoryProps) {
   const rows = buildRows(moves, startedAt);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const touchYRef = useRef<number | null>(null);
 
   // Auto-scroll to the latest move when a move is added.
   useEffect(() => {
@@ -120,8 +121,31 @@ export function MoveHistory({ moves, startedAt, headerRightSlot }: MoveHistoryPr
 
       <div
         ref={scrollerRef}
-        className="scrollbar-thin min-h-0 flex-1 overflow-y-auto"
-        style={{ scrollBehavior: "smooth" }}
+        className="scrollbar-thin min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain"
+        style={{
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          scrollBehavior: "smooth",
+        }}
+        onTouchStart={(event) => {
+          touchYRef.current = event.touches[0]?.clientY ?? null;
+        }}
+        onTouchMove={(event) => {
+          const el = scrollerRef.current;
+          const previousY = touchYRef.current;
+          const nextY = event.touches[0]?.clientY ?? null;
+          if (!el || previousY == null || nextY == null) return;
+
+          const deltaY = previousY - nextY;
+          const atTop = el.scrollTop <= 0;
+          const atBottom =
+            Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
+
+          if ((atTop && deltaY < 0) || (atBottom && deltaY > 0)) {
+            event.preventDefault();
+          }
+          touchYRef.current = nextY;
+        }}
       >
         {rows.length === 0 ? (
           <div className="px-4 py-8 text-center text-xs text-gray-500">

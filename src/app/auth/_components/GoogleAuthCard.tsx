@@ -109,13 +109,13 @@ export function GoogleAuthCard({ mode }: GoogleAuthCardProps) {
   return (
     <div className="bg-chessgrid relative min-h-screen flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
-        <div className="mb-10 flex items-center justify-center gap-3">
-          <BrandLogo />
+        <div className="mb-10 flex flex-col items-center justify-center gap-1.5">
+          <BrandLogo size="lg" />
           <span
-            className="text-xl font-semibold tracking-tight"
+            className="text-2xl font-semibold tracking-tight"
             style={{ color: "var(--text)" }}
           >
-            Q-chess
+            Q-Chess
           </span>
         </div>
 
