@@ -54,6 +54,7 @@ export interface MoveBroadcastPayload {
   isCastling: boolean;
   isPromotion: boolean;
   isCapture: boolean;
+  capturedPiece?: string;
   // Status after the move — 'active' or one of the chess-rule end states.
   gameStatus: string;
   // ISO timestamp from the sender's clock; informational only (server

@@ -35,6 +35,7 @@
 
   --success:       oklch(0.66 0.10 150);
   --success-soft:  oklch(0.66 0.10 150 / 0.14);
+  --avatar-fallback: #007a2b;
   --danger:        oklch(0.62 0.13 25);
   --danger-soft:   oklch(0.62 0.13 25 / 0.14);
   --warning:       oklch(0.78 0.10 85);
@@ -405,7 +406,7 @@ body {
   max-width: 95vmin;
   max-height: 95vmin;
   backface-visibility: hidden;
-  transform: translateZ(0) rotate(0deg);
+  transform: perspective(900px) translateZ(0) rotateY(0deg) rotate(0deg);
   transform-origin: center center;
   transition: transform var(--board-flip-duration) var(--board-flip-ease);
   will-change: transform;
@@ -506,7 +507,7 @@ body {
 }
 
 .board-orient.board-rotated {
-  transform: translateZ(0) rotate(180deg);
+  transform: perspective(900px) translateZ(0) rotateY(360deg) rotate(180deg);
 }
 
 /* Keep individual pieces upright when wrapper rotates */

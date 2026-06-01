@@ -7,6 +7,7 @@ import { type NewGameChoice } from "./NewGameModal";
 import { InviteUserModal } from "@/components/InviteUserModal";
 import { InvitesInboxModal } from "@/components/InvitesInboxModal";
 import { SoundControl } from "@/components/SoundControl";
+import { SettingsPanel } from "@/components/SettingsPanel";
 import { ThemeSelector } from "@/components/ThemeSelector";
 import { InGameToolbar } from "@/components/InGameToolbar";
 
@@ -305,6 +306,7 @@ export function GameNavigator({
           >
             <div className="space-y-3">
               <ThemeSelector />
+              <SettingsPanel className="w-full justify-center" />
               <SoundControl
                 variant="compact"
                 className="w-full justify-center"

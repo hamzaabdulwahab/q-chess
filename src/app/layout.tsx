@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { AuthHydrator } from "@/components/AuthHydrator";
 import { FloatingUserMenu } from "@/components/FloatingUserMenu";
+import { SettingsProvider } from "@/lib/settings-context";
 import { ThemeProvider } from "@/lib/theme-context";
 
 export const metadata: Metadata = {
@@ -33,13 +34,15 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="antialiased" suppressHydrationWarning>
-        <ThemeProvider>
-          <AuthHydrator />
-          <div className="min-h-screen flex flex-col">
-            <FloatingUserMenu />
-            <main className="flex-1">{children}</main>
-          </div>
-        </ThemeProvider>
+        <SettingsProvider>
+          <ThemeProvider>
+            <AuthHydrator />
+            <div className="min-h-screen flex flex-col">
+              <FloatingUserMenu />
+              <main className="flex-1">{children}</main>
+            </div>
+          </ThemeProvider>
+        </SettingsProvider>
       </body>
     </html>
   );

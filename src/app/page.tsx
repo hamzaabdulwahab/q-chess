@@ -702,9 +702,9 @@ function HomeContent() {
         <BotGameModal
           open={botGameOpen}
           onClose={() => setBotGameOpen(false)}
-          onCreated={(gameId) => {
+          onCreated={(gameId, humanColor) => {
             setBotGameOpen(false);
-            router.push(`/board?id=${gameId}`);
+            router.push(`/board?id=${gameId}&you=${humanColor}`);
           }}
         />
     </ChessLayout>

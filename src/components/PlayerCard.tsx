@@ -12,7 +12,7 @@ const PIECE_VALUES: Record<PieceType, number> = {
   q: 9,
   k: 0,
 };
-const PIECE_ORDER: PieceType[] = ["p", "n", "b", "r", "q", "k"];
+const PIECE_ORDER: PieceType[] = ["q", "r", "b", "n", "p"];
 const MAX_DISPLAYED_CAPTURES = 8;
 function isPieceType(s: string): s is PieceType {
   return (
@@ -37,6 +37,7 @@ export interface PlayerCardProps {
   capturedPieces: string[];
   // Pieces the OPPONENT has captured — needed to compute material delta.
   opponentCapturedPieces: string[];
+  showCapturedPieces?: boolean;
 }
 
 function formatClock(ms: number): string {
@@ -81,6 +82,7 @@ export function PlayerCard({
   isClockFrozen,
   capturedPieces,
   opponentCapturedPieces,
+  showCapturedPieces = true,
 }: PlayerCardProps) {
   const [displayMs, setDisplayMs] = useState<number>(timeLeftMs ?? 0);
 
@@ -149,9 +151,10 @@ export function PlayerCard({
         <div
           className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-semibold"
           style={{
-            background: "var(--surface-1)",
-            border: "1px solid var(--border-strong)",
-            color: "var(--text-2)",
+            background: "var(--avatar-fallback)",
+            border:
+              "1px solid color-mix(in oklch, var(--avatar-fallback) 78%, white 16%)",
+            color: "white",
           }}
         >
           {label.slice(0, 1).toUpperCase()}
@@ -178,7 +181,7 @@ export function PlayerCard({
             </span>
           )}
         </div>
-        {(orderedCaptures.length > 0 || advantage > 0) && (
+        {showCapturedPieces && (orderedCaptures.length > 0 || advantage > 0) && (
           <div className="mt-0.5 flex max-w-full items-center gap-1 overflow-hidden">
             <div className="flex min-w-0 shrink items-center -space-x-1">
               {orderedCaptures.slice(0, MAX_DISPLAYED_CAPTURES).map(({ piece, key }) => (

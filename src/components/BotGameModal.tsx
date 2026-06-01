@@ -7,7 +7,7 @@ import type { BotColorChoice } from "@/lib/stockfish/types";
 interface BotGameModalProps {
   open: boolean;
   onClose: () => void;
-  onCreated: (gameId: number) => void;
+  onCreated: (gameId: number, humanColor: "white" | "black") => void;
 }
 
 export function BotGameModal({ open, onClose, onCreated }: BotGameModalProps) {
@@ -43,13 +43,14 @@ export function BotGameModal({ open, onClose, onCreated }: BotGameModalProps) {
       });
       const data = (await res.json().catch(() => ({}))) as {
         gameId?: number;
+        humanColor?: "white" | "black";
         error?: string;
       };
-      if (!res.ok || !data.gameId) {
+      if (!res.ok || !data.gameId || !data.humanColor) {
         setError(data.error || "Failed to start game");
         return;
       }
-      onCreated(data.gameId);
+      onCreated(data.gameId, data.humanColor);
     } catch {
       setError("Failed to start game");
     } finally {

@@ -105,8 +105,9 @@ function SidebarAccount({
         style={{
           width: avatarSize,
           height: avatarSize,
-          background: "var(--success)",
-          borderColor: "color-mix(in oklch, var(--success) 55%, white 12%)",
+          background: "var(--avatar-fallback)",
+          borderColor:
+            "color-mix(in oklch, var(--avatar-fallback) 78%, white 16%)",
           color: "white",
         }}
       >

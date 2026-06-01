@@ -41,8 +41,13 @@ export function Avatar({ name, url, size = 40 }: AvatarProps) {
       : "text-xs";
   return (
     <div
-      className="rounded-full bg-gray-700 text-white grid place-items-center border border-gray-700"
-      style={{ width: px, height: px }}
+      className="rounded-full text-white grid place-items-center"
+      style={{
+        width: px,
+        height: px,
+        background: "var(--avatar-fallback)",
+        border: "1px solid color-mix(in oklch, var(--avatar-fallback) 78%, white 16%)",
+      }}
       aria-label="avatar"
     >
       <span className={`${fontSize} font-semibold`}>{initials}</span>

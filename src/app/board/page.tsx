@@ -33,6 +33,7 @@ import { isBotLevel, type BotLevel } from "@/lib/stockfish/types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { ThemeProvider } from "@/lib/theme-context";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { useSettings } from "@/lib/settings-context";
 import { soundManager } from "@/lib/sound-manager";
 import { ChessClient } from "@/lib/chess-client";
 import {
@@ -78,6 +79,7 @@ const extractCapturedPieces = (moves: MoveRow[]) => {
 };
 
 function BoardContent() {
+  const { settings } = useSettings();
   const searchParams = useSearchParams();
   const gameId = searchParams.get("id");
   const mode = searchParams.get("mode"); // "remote" or null
@@ -696,13 +698,14 @@ function BoardContent() {
     return null;
   }, [currentUserId, participants.whiteUserId, participants.blackUserId]);
 
+  const hasRouteColor = youColorParam === "white" || youColorParam === "black";
   const isMultiplayerGame =
     participants.whiteUserId !== null && participants.blackUserId !== null;
   const isBotGame = botGame !== null;
   // Games with a fixed colour per side (multiplayer and bot). The board
   // doesn't rotate between turns, and the user can only move on their own
   // turn.
-  const isFixedColorGame = isMultiplayerGame || isBotGame;
+  const isFixedColorGame = isMultiplayerGame || isBotGame || hasRouteColor;
 
   const myRemoteColor: "white" | "black" | null = isFixedColorGame
     ? remoteColorFromParticipants ?? youColorParam ?? null
@@ -710,7 +713,12 @@ function BoardContent() {
       ? remoteColorFromParticipants ?? youColorParam ?? null
       : null;
 
-  const baseBoardOrientation: "white" | "black" = myRemoteColor ?? fenTurn;
+  const localBoardOrientation: "white" | "black" = settings.autoFlipBoard
+    ? fenTurn
+    : "white";
+  const baseBoardOrientation: "white" | "black" = isFixedColorGame
+    ? myRemoteColor ?? youColorParam ?? "white"
+    : localBoardOrientation;
   const boardOrientation: "white" | "black" = boardFlipped
     ? baseBoardOrientation === "white"
       ? "black"
@@ -766,6 +774,7 @@ function BoardContent() {
       winner?: "white" | "black" | "draw" | null;
       currentPlayer?: "white" | "black";
       moveNumber?: number;
+      capturedPiece?: string | null;
     }
 
     const requestBotMove = async (): Promise<{
@@ -850,7 +859,17 @@ function BoardContent() {
             moveHistory: payload.san
               ? [...prev.moveHistory, payload.san]
               : prev.moveHistory,
-            capturedPieces: prev.capturedPieces,
+            capturedPieces: payload.capturedPiece
+              ? {
+                  ...prev.capturedPieces,
+                  [botGame.botSide === "white" ? "black" : "white"]: [
+                    ...prev.capturedPieces[
+                      botGame.botSide === "white" ? "black" : "white"
+                    ],
+                    payload.capturedPiece,
+                  ],
+                }
+              : prev.capturedPieces,
           }));
 
           // Trigger the slide-in animation for Stockfish's move so the
@@ -1042,6 +1061,7 @@ function BoardContent() {
     isCheckmate?: boolean;
     isCastling?: boolean;
     isPromotion?: boolean;
+    capturedPiece?: string;
   }) => {
     if (result.success && !gameOver) {
       const isEnd = Boolean(
@@ -1081,22 +1101,6 @@ function BoardContent() {
           : "draw"
         : null;
 
-      setGameState((prev) => ({
-        fen: result.fen,
-        currentTurn: appliedTurn,
-        gameStatus: result.gameStatus || "active",
-        winner: optimisticWinner ?? prev.winner,
-        moveHistory: [
-          ...prev.moveHistory,
-          ...(result.move ? [result.move] : []),
-        ],
-        capturedPieces: prev.capturedPieces, // Would update based on captures
-      }));
-
-      // Append to the move-history side panel optimistically so the latest
-      // move appears immediately. The server reload (or postgres_changes
-      // fallback) will reconcile with the canonical record.
-      //
       // `appliedTurn` is the side to move NEXT once the game continues, so
       // the player who actually just made the move is the opposite (or
       // equal to appliedTurn when the move ended the game — `appliedTurn`
@@ -1107,6 +1111,33 @@ function BoardContent() {
         : fenTurn === "white"
           ? "black"
           : "white";
+
+      setGameState((prev) => ({
+        fen: result.fen,
+        currentTurn: appliedTurn,
+        gameStatus: result.gameStatus || "active",
+        winner: optimisticWinner ?? prev.winner,
+        moveHistory: [
+          ...prev.moveHistory,
+          ...(result.move ? [result.move] : []),
+        ],
+        capturedPieces: result.capturedPiece
+          ? {
+              ...prev.capturedPieces,
+              [playerThatMoved === "white" ? "black" : "white"]: [
+                ...prev.capturedPieces[
+                  playerThatMoved === "white" ? "black" : "white"
+                ],
+                result.capturedPiece,
+              ],
+            }
+          : prev.capturedPieces,
+      }));
+
+      // Append to the move-history side panel optimistically so the latest
+      // move appears immediately. The server reload (or postgres_changes
+      // fallback) will reconcile with the canonical record.
+      //
       if (result.move) {
         setMoveRecords((prev) => [
           ...prev,
@@ -1152,6 +1183,7 @@ function BoardContent() {
           isCastling: Boolean(result.isCastling),
           isPromotion: Boolean(result.isPromotion),
           isCapture: Boolean(result.isCapture),
+          capturedPiece: result.capturedPiece,
           gameStatus: result.gameStatus || "active",
           createdAt: new Date().toISOString(),
         };
@@ -1292,7 +1324,17 @@ function BoardContent() {
         moveHistory: [...prev.moveHistory, payload.san],
         // capturedPieces is rebuilt from the moves table on the next
         // /api/games/[id] reload (triggered by postgres_changes fallback).
-        capturedPieces: prev.capturedPieces,
+        capturedPieces: payload.capturedPiece
+          ? {
+              ...prev.capturedPieces,
+              [payload.player === "white" ? "black" : "white"]: [
+                ...prev.capturedPieces[
+                  payload.player === "white" ? "black" : "white"
+                ],
+                payload.capturedPiece,
+              ],
+            }
+          : prev.capturedPieces,
       }));
 
       // Trigger the slide-in animation for the opponent's move.
@@ -1503,6 +1545,7 @@ function BoardContent() {
                     lastSyncAt={clocks.lastMoveAt}
                     capturedPieces={capturedFor(topColor)}
                     opponentCapturedPieces={capturedFor(bottomColor)}
+                    showCapturedPieces={settings.showCapturedPieces}
                   />
                 </div>
 
@@ -1554,6 +1597,7 @@ function BoardContent() {
                     lastSyncAt={clocks.lastMoveAt}
                     capturedPieces={capturedFor(bottomColor)}
                     opponentCapturedPieces={capturedFor(topColor)}
+                    showCapturedPieces={settings.showCapturedPieces}
                   />
                 </div>
               </div>

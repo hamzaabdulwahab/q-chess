@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChessClient } from "@/lib/chess-client";
+import { useSettings } from "@/lib/settings-context";
 import { soundManager } from "@/lib/sound-manager";
 import { useChessTheme } from "@/lib/theme-context";
 import { GameEndScreen } from "./GameEndScreen";
@@ -30,6 +31,7 @@ interface ChessBoardProps {
     isCheckmate?: boolean;
     isCastling?: boolean;
     isPromotion?: boolean;
+    capturedPiece?: string;
   }) => void;
   onMoveCommitted?: (result: {
     fen: string;
@@ -189,6 +191,8 @@ interface SquareProps {
   isDraggingSource?: boolean;
   isDragTarget?: boolean;
   isLegalDragTarget?: boolean;
+  isConfirmTarget?: boolean;
+  onConfirmMove: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 const Square = React.memo(function Square({
@@ -208,6 +212,8 @@ const Square = React.memo(function Square({
   isDraggingSource = false,
   isDragTarget = false,
   isLegalDragTarget = false,
+  isConfirmTarget = false,
+  onConfirmMove,
 }: SquareProps) {
   const [hovered, setHovered] = useState(false);
   const { currentTheme } = useChessTheme();
@@ -330,20 +336,35 @@ const Square = React.memo(function Square({
           )}
         </>
       )}
+      {isConfirmTarget && (
+        <button
+          type="button"
+          onClick={onConfirmMove}
+          className="absolute right-1 top-1 z-30 grid h-7 w-7 place-items-center rounded-full border border-white/60 bg-emerald-500 text-sm font-bold text-white shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          aria-label="Confirm move"
+          title="Confirm move"
+        >
+          ✓
+        </button>
+      )}
     </div>
   );
 });
 
-interface PromotionModalProps {
+interface PromotionPopoverProps {
   show: boolean;
   color: "white" | "black";
+  targetSquare: string | null;
+  getAnchorStyle: (square: string | null) => React.CSSProperties;
   onSelect: (piece: string) => void;
   onCancel: () => void;
 }
 
-const PromotionModal: React.FC<PromotionModalProps> = ({
+const PromotionPopover: React.FC<PromotionPopoverProps> = ({
   show,
   color,
+  targetSquare,
+  getAnchorStyle,
   onSelect,
   onCancel,
 }) => {
@@ -358,34 +379,42 @@ const PromotionModal: React.FC<PromotionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl">
-        <h3 className="text-lg font-bold mb-4 text-black">
-          Choose promotion piece:
-        </h3>
-        <div className="flex gap-4">
+    <>
+      <button
+        type="button"
+        className="fixed inset-0 z-50 cursor-default bg-black/20"
+        aria-label="Cancel promotion"
+        onClick={onCancel}
+      />
+      <div
+        className="fixed z-[60] rounded-lg p-2 shadow-2xl"
+        style={{
+          ...getAnchorStyle(targetSquare),
+          background: "var(--surface)",
+          border: "1px solid var(--border-strong)",
+        }}
+      >
+        <div className="grid grid-cols-4 gap-1.5">
           {pieces.map((p) => {
             const pieceCode = `${color[0]}${p.toUpperCase()}`;
             return (
               <button
                 key={p}
                 onClick={() => onSelect(p)}
-                className="flex flex-col items-center p-3 border-2 border-gray-300 rounded hover:border-gray-900 hover:bg-gray-100 transition-colors"
+                className="grid h-20 w-16 place-items-center rounded-md border border-white/10 bg-white/[0.04] p-1 transition-colors hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                title={labels[p]}
+                aria-label={`Promote to ${labels[p]}`}
               >
                 <Piece piece={pieceCode} />
-                <span className="text-sm text-black mt-2">{labels[p]}</span>
+                <span className="text-[10px] font-medium text-gray-300">
+                  {labels[p]}
+                </span>
               </button>
             );
           })}
         </div>
-        <button
-          onClick={onCancel}
-          className="mt-4 w-full bg-gray-700 text-white py-2 rounded hover:bg-gray-800"
-        >
-          Cancel
-        </button>
       </div>
-    </div>
+    </>
   );
 };
 
@@ -403,6 +432,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   externalLastMove = null,
   currentMoveCount = 0,
 }) => {
+  const { settings } = useSettings();
   const [chessService, setChessService] = useState<ChessClient>(
     new ChessClient(fen),
   );
@@ -418,8 +448,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [pendingMove, setPendingMove] = useState<{
     from: string;
     to: string;
+    promotion?: string;
   } | null>(null);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
+  const [confirmMove, setConfirmMove] = useState<{
+    from: string;
+    to: string;
+    promotion?: string;
+  } | null>(null);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(
     null,
   );
@@ -441,6 +477,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     moveInFlightRef.current = false;
     setMoveInFlight(false);
     setSelectedSquare(null);
+    setConfirmMove(null);
+    setPendingMove(null);
+    setShowPromotionModal(false);
     dragRef.current = null;
     suppressClickUntilRef.current = 0;
     if (dragFrameRef.current !== null) {
@@ -570,21 +609,23 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const canStartPieceDrag = useCallback(
     (square: string, piece: string | null | undefined) => {
-      if (disabled || moveInFlight || gameState.gameOver) return false;
+      if (disabled || moveInFlight || gameState.gameOver || confirmMove) {
+        return false;
+      }
       return Boolean(piece && piece[0] === activeTurn.charAt(0));
     },
-    [activeTurn, disabled, gameState.gameOver, moveInFlight],
+    [activeTurn, confirmMove, disabled, gameState.gameOver, moveInFlight],
   );
 
   const selectedLegalTargets = useMemo(() => {
-    if (!selectedSquare) return new Set<string>();
+    if (!settings.highlightLegalMoves || !selectedSquare) return new Set<string>();
     return new Set(chessService.getPossibleMoves(selectedSquare));
-  }, [chessService, selectedSquare]);
+  }, [chessService, selectedSquare, settings.highlightLegalMoves]);
 
   const dragLegalTargets = useMemo(() => {
-    if (!dragState?.from) return new Set<string>();
+    if (!settings.highlightLegalMoves || !dragState?.from) return new Set<string>();
     return new Set(chessService.getPossibleMoves(dragState.from));
-  }, [chessService, dragState?.from]);
+  }, [chessService, dragState?.from, settings.highlightLegalMoves]);
 
   const makeMove = useCallback(
     async (from: string, to: string, promotion?: string) => {
@@ -681,6 +722,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           isCheckmate: moveData.isCheckmate,
           isCastling: moveData.isCastle,
           isPromotion: moveData.isPromotion,
+          capturedPiece: local.capturedPiece,
         });
 
         // Persist to server in the background. On success we keep the
@@ -842,6 +884,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               isCheckmate: moveData.isCheckmate,
               isCastling: moveData.isCastle,
               isPromotion: moveData.isPromotion,
+              capturedPiece: result.capturedPiece,
             });
           }
         } else {
@@ -864,7 +907,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const handlePromotionSelect = async (piece: string) => {
     setShowPromotionModal(false);
     if (pendingMove) {
-      await makeMove(pendingMove.from, pendingMove.to, piece);
+      if (settings.confirmMove) {
+        setConfirmMove({ ...pendingMove, promotion: piece });
+      } else {
+        await makeMove(pendingMove.from, pendingMove.to, piece);
+      }
       setPendingMove(null);
     }
     setSelectedSquare(null);
@@ -876,6 +923,35 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setSelectedSquare(null);
   };
 
+  const queueOrMakeMove = useCallback(
+    async (from: string, to: string, promotion?: string) => {
+      if (settings.confirmMove) {
+        setConfirmMove({ from, to, promotion });
+        return { success: true };
+      }
+      return makeMove(from, to, promotion);
+    },
+    [makeMove, settings.confirmMove],
+  );
+
+  const confirmQueuedMove = useCallback(
+    async (event?: React.MouseEvent<HTMLButtonElement>) => {
+      event?.stopPropagation();
+      if (!confirmMove) return;
+      const move = confirmMove;
+      setConfirmMove(null);
+      await makeMove(move.from, move.to, move.promotion);
+    },
+    [confirmMove, makeMove],
+  );
+
+  const cancelQueuedMove = useCallback(() => {
+    setConfirmMove(null);
+    setPendingMove(null);
+    setShowPromotionModal(false);
+    setSelectedSquare(null);
+  }, []);
+
   const handleSquareClick = useCallback(
     async (square: string) => {
       if (Date.now() < suppressClickUntilRef.current) {
@@ -884,6 +960,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       if (disabled || moveInFlight || gameState.gameOver) return;
 
       const piece = chessService.getPiece(square);
+
+      if (confirmMove) {
+        if (confirmMove.to === square) return;
+        cancelQueuedMove();
+        if (!(piece && piece[0] === activeTurn.charAt(0))) return;
+      }
 
       if (selectedSquare) {
         if (selectedSquare === square) {
@@ -894,8 +976,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           if (isPromotionMove(selectedSquare, square)) {
             // Clear selection immediately for responsive UI
             setSelectedSquare(null);
-            setPendingMove({ from: selectedSquare, to: square });
-            setShowPromotionModal(true);
+            if (settings.autoPromoteToQueen) {
+              await queueOrMakeMove(selectedSquare, square, "q");
+            } else {
+              setPendingMove({ from: selectedSquare, to: square });
+              setShowPromotionModal(true);
+            }
           } else {
             // Try to make a regular move
             const isLegalMove = chessService.isMoveLegal(selectedSquare, square);
@@ -904,7 +990,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               // Clear selection immediately for responsive UI
               setSelectedSquare(null);
               // Make a regular move (including en passant and castling)
-              await makeMove(selectedSquare, square);
+              await queueOrMakeMove(selectedSquare, square);
             } else if (piece && piece[0] === activeTurn.charAt(0)) {
               // Select a new piece of the same color
               setSelectedSquare(square);
@@ -927,8 +1013,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       chessService,
       disabled,
       moveInFlight,
-      makeMove,
+      queueOrMakeMove,
       isPromotionMove,
+      settings.autoPromoteToQueen,
+      confirmMove,
+      cancelQueuedMove,
     ],
   );
 
@@ -978,6 +1067,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
       if (isPromotionMove(from, to)) {
         setSelectedSquare(null);
+        if (settings.autoPromoteToQueen) {
+          clearDrag();
+          await queueOrMakeMove(from, to, "q");
+          return;
+        }
         setPendingMove({ from, to });
         setShowPromotionModal(true);
         clearDrag();
@@ -987,7 +1081,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       if (chessService.isMoveLegal(from, to)) {
         setSelectedSquare(null);
         clearDrag();
-        await makeMove(from, to);
+        await queueOrMakeMove(from, to);
         return;
       }
 
@@ -995,7 +1089,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       setSelectedSquare(null);
       clearDrag();
     },
-    [chessService, clearDrag, isPromotionMove, makeMove],
+    [
+      chessService,
+      clearDrag,
+      isPromotionMove,
+      queueOrMakeMove,
+      settings.autoPromoteToQueen,
+    ],
   );
 
   const handleSquarePointerDown = useCallback(
@@ -1102,6 +1202,28 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     squareFromPoint,
   ]);
 
+  const getSquareAnchorStyle = useCallback((square: string | null) => {
+    const fallback: React.CSSProperties = {
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+    };
+    if (!square || !boardRef.current) return fallback;
+    const el = boardRef.current.querySelector<HTMLElement>(
+      `[data-square="${square}"]`,
+    );
+    if (!el) return fallback;
+
+    const rect = el.getBoundingClientRect();
+    const left = rect.left + rect.width / 2;
+    const top = Math.max(8, rect.top - 10);
+    return {
+      left,
+      top,
+      transform: "translate(-50%, -100%)",
+    };
+  }, []);
+
   const renderBoard = () => {
     const squares = [];
     // Detailed moves no longer needed for visual indicators
@@ -1150,7 +1272,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const isHighlighted = selectedLegalTargets.has(square);
 
         const isLastMove =
-          lastMove && (lastMove.from === square || lastMove.to === square);
+          settings.highlightLastMove &&
+          lastMove &&
+          (lastMove.from === square || lastMove.to === square);
         const animateFrom =
           animateTo === square && animateOffset ? animateOffset : null;
         const isDraggingSource =
@@ -1172,10 +1296,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         // Show file letter on the bottom edge, rank number on the left edge, based on viewer orientation
         const onBottomEdge = isBlackView ? rank === 7 : rank === 0;
         const onLeftEdge = isBlackView ? file === 7 : file === 0;
-        const fileLabel = onBottomEdge
+        const fileLabel = settings.showCoordinates && onBottomEdge
           ? files[isBlackView ? 7 - file : file]
           : null;
-        const rankLabel = onLeftEdge
+        const rankLabel = settings.showCoordinates && onLeftEdge
           ? String(isBlackView ? 8 - rank : rank + 1)
           : null;
 
@@ -1200,6 +1324,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             isDraggingSource={isDraggingSource}
             isDragTarget={isDragTarget}
             isLegalDragTarget={isLegalDragTarget}
+            isConfirmTarget={confirmMove?.to === square}
+            onConfirmMove={confirmQueuedMove}
           />,
         );
       }
@@ -1210,10 +1336,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   return (
     <div className="flex flex-col items-center">
-      {/* Promotion Modal */}
-      <PromotionModal
+      {/* Promotion picker */}
+      <PromotionPopover
         show={showPromotionModal}
         color={activeTurn}
+        targetSquare={pendingMove?.to ?? null}
+        getAnchorStyle={getSquareAnchorStyle}
         onSelect={handlePromotionSelect}
         onCancel={handlePromotionCancel}
       />

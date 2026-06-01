@@ -268,6 +268,7 @@ export async function POST(
       from,
       to,
       promotion: promotion ?? null,
+      capturedPiece,
       fen: fenAfter,
       pgn,
       gameStatus,

@@ -58,9 +58,10 @@ export function LobbyOnlineUsers({ me, onChallenge }: LobbyOnlineUsersProps) {
                   <div
                     className="grid h-8 w-8 place-items-center rounded-full text-xs font-semibold"
                     style={{
-                      background: "var(--surface-1)",
-                      border: "1px solid var(--border-strong)",
-                      color: "var(--text-2)",
+                      background: "var(--avatar-fallback)",
+                      border:
+                        "1px solid color-mix(in oklch, var(--avatar-fallback) 78%, white 16%)",
+                      color: "white",
                     }}
                   >
                     {user.username.slice(0, 1).toUpperCase()}
