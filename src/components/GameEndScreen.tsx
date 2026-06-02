@@ -1,6 +1,7 @@
 "use client";
 
 import { Home, RotateCcw, Eye } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 
 export type EndStatus =
   | "checkmate"
@@ -185,7 +186,7 @@ export function GameEndScreen({
             onClick={() => (window.location.href = "/board")}
             className="btn-secondary inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
           >
-            <RotateCcw className="h-4 w-4" />
+            <AppIcon icon={RotateCcw} className="h-4 w-4" />
             New game
           </button>
           <button
@@ -193,7 +194,7 @@ export function GameEndScreen({
             onClick={() => (window.location.href = "/")}
             className="btn-secondary inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
           >
-            <Home className="h-4 w-4" />
+            <AppIcon icon={Home} className="h-4 w-4" />
             Lobby
           </button>
           {gameId && onDismiss && (
@@ -203,7 +204,7 @@ export function GameEndScreen({
               className="btn-ghost col-span-2 inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
               style={{ color: "var(--text-2)" }}
             >
-              <Eye className="h-4 w-4" />
+              <AppIcon icon={Eye} className="h-4 w-4" />
               View board
             </button>
           )}

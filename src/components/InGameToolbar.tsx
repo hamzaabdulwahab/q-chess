@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Flag, Handshake } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 interface InGameToolbarProps {
@@ -105,7 +106,7 @@ export function InGameToolbar({
               : undefined
           }
         >
-          <Handshake className="h-4 w-4" />
+          <AppIcon icon={Handshake} className="h-4 w-4" />
           {drawLabel}
         </button>
         <button
@@ -114,7 +115,7 @@ export function InGameToolbar({
           disabled={!canResign || busy !== null}
           className="btn-danger inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
         >
-          <Flag className="h-4 w-4" />
+          <AppIcon icon={Flag} className="h-4 w-4" />
           {busy === "resign" ? "Resigning…" : "Resign"}
         </button>
       </div>

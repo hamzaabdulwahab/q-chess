@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { Crown, Handshake, Play, Scale, CheckCircle2, X } from "lucide-react";
+import { CheckCircle2, Handshake, Play, Scale, Trophy, X } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 
 export type Category =
   | "all"
@@ -81,35 +82,35 @@ export function ArchiveFilters({
               active={category === "active"}
               onClick={() => onCategoryChange("active")}
             >
-              <Play className="h-3 w-3" />
+              <AppIcon icon={Play} className="h-3 w-3" />
               Active
             </Chip>
             <Chip
               active={category === "completed"}
               onClick={() => onCategoryChange("completed")}
             >
-              <CheckCircle2 className="h-3 w-3" />
+              <AppIcon icon={CheckCircle2} className="h-3 w-3" />
               Done
             </Chip>
             <Chip
               active={category === "checkmate"}
               onClick={() => onCategoryChange("checkmate")}
             >
-              <Crown className="h-3 w-3" />
+              <AppIcon icon={Trophy} className="h-3 w-3" />
               Mate
             </Chip>
             <Chip
               active={category === "draw"}
               onClick={() => onCategoryChange("draw")}
             >
-              <Handshake className="h-3 w-3" />
+              <AppIcon icon={Handshake} className="h-3 w-3" />
               Draw
             </Chip>
             <Chip
               active={category === "stalemate"}
               onClick={() => onCategoryChange("stalemate")}
             >
-              <Scale className="h-3 w-3" />
+              <AppIcon icon={Scale} className="h-3 w-3" />
               Stale
             </Chip>
 
@@ -176,7 +177,7 @@ export function ArchiveFilters({
               className="btn-ghost inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs"
               title="Clear filters"
             >
-              <X className="h-3 w-3" />
+              <AppIcon icon={X} className="h-3 w-3" />
               Clear
             </button>
           )}

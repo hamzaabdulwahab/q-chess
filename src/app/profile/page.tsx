@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { AppIcon } from "@/components/AppIcon";
 import { Avatar } from "@/components/Avatar";
 import { ChessLayout } from "@/components/ChessLayout";
 
@@ -234,7 +235,7 @@ export default function ProfilePage() {
                     aria-label="Change profile picture"
                     title="Change profile picture"
                   >
-                    <Camera className="h-3.5 w-3.5" />
+                    <AppIcon icon={Camera} className="h-3.5 w-3.5" />
                   </button>
                 </div>
 
@@ -302,7 +303,7 @@ export default function ProfilePage() {
                     className="btn-ghost inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs"
                     title="Remove picture"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <AppIcon icon={Trash2} className="h-3 w-3" />
                     Remove
                   </button>
                 )}
@@ -382,7 +383,7 @@ export default function ProfilePage() {
                   className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm"
                   style={{ color: "var(--text-3)" }}
                 >
-                  <LogOut className="h-3.5 w-3.5" />
+                  <AppIcon icon={LogOut} className="h-3.5 w-3.5" />
                   Log out
                 </button>
                 <div className="flex items-center gap-2">

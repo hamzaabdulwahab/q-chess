@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { useEffect, useRef, useState } from "react";
-import { CirclePlay, LogOut, UserRound } from "lucide-react";
+import { LogOut, Play, UserRound } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 
 export function FloatingUserMenu() {
   const pathname = usePathname() ?? "";
@@ -115,11 +116,11 @@ export function FloatingUserMenu() {
           }}
           title="Menu"
         >
-          <UserRound
+          <AppIcon
+            icon={UserRound}
             className={`w-5 h-5 transition-transform duration-200 ${
               open ? "scale-110" : ""
             }`}
-            aria-hidden
           />
           {/* Dropdown Arrow (points to menu) */}
           <svg
@@ -166,7 +167,7 @@ export function FloatingUserMenu() {
               }`}
             >
               <span className="flex items-center gap-2">
-                <CirclePlay className="w-4 h-4" aria-hidden />
+                <AppIcon icon={Play} className="w-4 h-4" />
                 Q-Chess
               </span>
             </Link>
@@ -180,7 +181,7 @@ export function FloatingUserMenu() {
               }`}
             >
               <span className="flex items-center gap-2">
-                <UserRound className="w-4 h-4" aria-hidden />
+                <AppIcon icon={UserRound} className="w-4 h-4" />
                 View Profile
               </span>
             </Link>
@@ -194,7 +195,7 @@ export function FloatingUserMenu() {
               type="button"
             >
               <span className="flex items-center gap-2">
-                <LogOut className="w-4 h-4" aria-hidden />
+                <AppIcon icon={LogOut} className="w-4 h-4" />
                 Log out
               </span>
             </button>

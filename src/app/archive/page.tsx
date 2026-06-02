@@ -18,6 +18,7 @@ import {
 import { BrandLogo } from "@/components/BrandLogo";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ChessLayout } from "@/components/ChessLayout";
+import { AppIcon } from "@/components/AppIcon";
 
 interface Game {
   id: number;
@@ -228,7 +229,8 @@ function ArchivePageContent() {
             className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm"
             aria-label="Refresh"
           >
-            <RefreshCw
+            <AppIcon
+              icon={RefreshCw}
               className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
             />
             Refresh
@@ -264,9 +266,9 @@ function ArchivePageContent() {
         {/* Search + filters */}
         <div className="mb-3 flex gap-2">
           <div className="relative flex-1">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
-              style={{ color: "var(--text-3)" }}
+            <AppIcon
+              icon={Search}
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-3)]"
             />
             <input
               type="search"
@@ -401,7 +403,7 @@ function ArchivePageContent() {
                       <button
                         type="button"
                         onClick={() => deleteGame(game.id)}
-                        className="rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                        className="rounded p-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
                         style={{ color: "var(--text-3)" }}
                         onMouseEnter={(e) =>
                           (e.currentTarget.style.color = "oklch(0.7 0.16 25)")
@@ -412,14 +414,14 @@ function ArchivePageContent() {
                         title="Delete game"
                         aria-label="Delete game"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <AppIcon icon={Trash2} className="h-3.5 w-3.5" />
                       </button>
                       <Link
                         href={`/board?id=${game.id}`}
                         className="btn-secondary inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs"
                       >
                         {game.status === "active" ? "Resume" : "View"}
-                        <ChevronRight className="h-3 w-3" />
+                        <AppIcon icon={ChevronRight} className="h-3 w-3" />
                       </Link>
                     </div>
                   </div>

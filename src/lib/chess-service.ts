@@ -4,6 +4,20 @@ import { Chess } from "chess.js";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { getSupabasePooledClient } from "@/lib/supabase-pooled";
 
+type PlayerColor = "white" | "black";
+
+type TimedGameRow = {
+  id: number;
+  status: string;
+  current_player: PlayerColor;
+  white_user_id: string | null;
+  black_user_id: string | null;
+  time_control_initial_ms: number | null;
+  white_time_left_ms: number | null;
+  black_time_left_ms: number | null;
+  last_move_at: string | null;
+};
+
 export class ChessService {
   public chess: Chess;
 
@@ -17,6 +31,73 @@ export class ChessService {
 
   private static normalizeUsername(value: string) {
     return value.trim().toLowerCase();
+  }
+
+  private static getTimedOutPatch(row: TimedGameRow, now = new Date()) {
+    if (
+      row.status !== "active" ||
+      !row.white_user_id ||
+      !row.black_user_id ||
+      row.time_control_initial_ms == null ||
+      row.white_time_left_ms == null ||
+      row.black_time_left_ms == null ||
+      !row.last_move_at
+    ) {
+      return null;
+    }
+
+    const lastMoveAtMs = new Date(row.last_move_at).getTime();
+    if (!Number.isFinite(lastMoveAtMs)) return null;
+
+    const activeTimeLeftMs =
+      row.current_player === "white"
+        ? row.white_time_left_ms
+        : row.black_time_left_ms;
+    const elapsedMs = Math.max(0, now.getTime() - lastMoveAtMs);
+    if (elapsedMs < activeTimeLeftMs) return null;
+
+    const winner: PlayerColor =
+      row.current_player === "white" ? "black" : "white";
+    const nowIso = now.toISOString();
+
+    return {
+      status: "timeout",
+      winner,
+      ended_at: nowIso,
+      result_reason: `${row.current_player}_time_expired`,
+      pending_draw_offer_by: null,
+      last_move_at: nowIso,
+      updated_at: nowIso,
+      white_time_left_ms:
+        row.current_player === "white" ? 0 : row.white_time_left_ms,
+      black_time_left_ms:
+        row.current_player === "black" ? 0 : row.black_time_left_ms,
+    };
+  }
+
+  private static async finalizeExpiredTimedGame(
+    row: TimedGameRow,
+    userId: string,
+  ) {
+    const patch = ChessService.getTimedOutPatch(row);
+    if (!patch) return null;
+
+    const supabase = getSupabaseServer();
+    const { data, error } = await supabase
+      .from("games")
+      .update(patch)
+      .eq("id", row.id)
+      .eq("status", "active")
+      .or(ChessService.buildParticipantFilter(userId))
+      .select(
+        "status, winner, ended_at, result_reason, pending_draw_offer_by, last_move_at, updated_at, white_time_left_ms, black_time_left_ms",
+      );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data?.[0] ?? null;
   }
 
   private static async getParticipantGameState(gameId: number, userId: string) {
@@ -161,6 +242,14 @@ export class ChessService {
 
     if (gameError || !gameData) {
       return null;
+    }
+
+    const timeoutPatch = await ChessService.finalizeExpiredTimedGame(
+      gameData as TimedGameRow,
+      userId,
+    );
+    if (timeoutPatch) {
+      Object.assign(gameData, timeoutPatch);
     }
 
     // Sort moves by move_number to ensure correct order
@@ -330,8 +419,18 @@ export class ChessService {
       throw new Error(gamesError.message);
     }
 
+    const resolvedGamesData = await Promise.all(
+      (gamesData || []).map(async (game: any) => {
+        const timeoutPatch = await ChessService.finalizeExpiredTimedGame(
+          game as TimedGameRow,
+          userId,
+        );
+        return timeoutPatch ? { ...game, ...timeoutPatch } : game;
+      }),
+    );
+
     // Get move counts for these games in a single query
-    const gameIds = (gamesData || []).map((game: any) => game.id);
+    const gameIds = resolvedGamesData.map((game: any) => game.id);
     let moveCounts: Record<number, number> = {};
     
     if (gameIds.length > 0) {
@@ -350,7 +449,7 @@ export class ChessService {
     }
 
     // Transform the data to include move count
-    const gamesLight = (gamesData || []).map((game: any) => ({
+    const gamesLight = resolvedGamesData.map((game: any) => ({
       ...game,
       totalMoves: moveCounts[game.id] || 0,
     }));
@@ -417,8 +516,19 @@ export class ChessService {
   }
 
   // Delete a game
-  static async deleteGame(gameId: number): Promise<boolean> {
+  static async deleteGame(gameId: number, userId?: string): Promise<boolean> {
     const supabase = ChessService.getClient();
+    if (userId) {
+      const { data: game, error: gameError } = await supabase
+        .from("games")
+        .select("id")
+        .eq("id", gameId)
+        .or(ChessService.buildParticipantFilter(userId))
+        .maybeSingle();
+
+      if (gameError || !game) return false;
+    }
+
     // Delete moves first (in case no FK cascade)
     await supabase.from("moves").delete().eq("game_id", gameId);
     const { error } = await supabase.from("games").delete().eq("id", gameId);
@@ -473,7 +583,9 @@ export class ChessService {
     const supabase = getSupabaseServer();
     const { data, error } = await supabase
       .from("games")
-      .select("id")
+      .select(
+        "id, status, current_player, white_user_id, black_user_id, time_control_initial_ms, white_time_left_ms, black_time_left_ms, last_move_at"
+      )
       .eq("status", "active")
       .not("white_user_id", "is", null)
       .not("black_user_id", "is", null)
@@ -482,6 +594,13 @@ export class ChessService {
       .maybeSingle();
     if (error && error.code !== "PGRST116") {
       throw new Error(error.message);
+    }
+    if (data?.id) {
+      const timeoutPatch = await ChessService.finalizeExpiredTimedGame(
+        data as TimedGameRow,
+        userId,
+      );
+      if (timeoutPatch) return null;
     }
     return data?.id ? (data.id as number) : null;
   }
@@ -826,6 +945,19 @@ export class ChessService {
         return {
           success: false,
           error: "Game is not active",
+        };
+      }
+
+      const timeoutPatch = await ChessService.finalizeExpiredTimedGame(
+        gameState,
+        actingUserId,
+      );
+      if (timeoutPatch) {
+        return {
+          success: false,
+          gameStatus: "timeout",
+          winner: timeoutPatch.winner as "white" | "black",
+          error: "Time has expired",
         };
       }
 

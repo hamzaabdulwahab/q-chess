@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Palette, Check } from 'lucide-react';
+import { AppIcon } from "@/components/AppIcon";
 import { useChessTheme } from '@/lib/theme-context';
 
 export function ThemeSelector() {
@@ -98,7 +99,7 @@ export function ThemeSelector() {
         }}
         title="Change board theme"
       >
-        <Palette className="w-4 h-4" />
+        <AppIcon icon={Palette} className="w-4 h-4" />
         <span>Theme</span>
       </button>
 
@@ -167,7 +168,7 @@ export function ThemeSelector() {
                   
                   {/* Check mark for current theme */}
                   {currentTheme.id === theme.id && (
-                    <Check className="w-4 h-4 text-green-400" />
+                    <AppIcon icon={Check} className="w-4 h-4 text-green-400" />
                   )}
                 </button>
               ))}

@@ -6,13 +6,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   Archive,
-  CirclePlay,
-  Crown,
+  Grid3X3,
   House,
   Menu,
   PanelLeft,
+  Play,
   X,
 } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 import { BrandLogo } from "@/components/BrandLogo";
 
 type ShellVariant = "page" | "game";
@@ -28,8 +29,8 @@ interface ChessLayoutProps {
 }
 
 const navItems = [
-  { href: "/", label: "Play", Icon: CirclePlay },
-  { href: "/board", label: "Board", Icon: Crown },
+  { href: "/", label: "Play", Icon: Play },
+  { href: "/board", label: "Board", Icon: Grid3X3 },
   { href: "/archive", label: "Archive", Icon: Archive },
 ];
 
@@ -255,7 +256,7 @@ export function ChessLayout({
             title={label}
             aria-label={expanded ? undefined : label}
           >
-            <Icon className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden="true" />
+            <AppIcon icon={Icon} className="h-5 w-5 shrink-0" />
             <span className={expanded ? "truncate" : "sr-only"}>
               {label}
             </span>
@@ -301,7 +302,7 @@ export function ChessLayout({
               <span className="truncate text-xl font-semibold tracking-tight">
                 Q-Chess
               </span>
-              <PanelLeft className="h-5 w-5 shrink-0 text-white" strokeWidth={2} />
+              <AppIcon icon={PanelLeft} className="h-5 w-5 shrink-0 text-white" />
             </>
           ) : (
             <span className="relative grid h-9 w-9 shrink-0 place-items-center">
@@ -312,11 +313,11 @@ export function ChessLayout({
               >
                 <BrandLogo size="sm" />
               </span>
-              <PanelLeft
+              <AppIcon
+                icon={PanelLeft}
                 className={`h-5 w-5 text-white transition-opacity duration-150 ease-out ${
                   toggleHovered ? "opacity-100" : "opacity-0"
                 }`}
-                strokeWidth={2}
               />
             </span>
           )}
@@ -346,7 +347,7 @@ export function ChessLayout({
           className="grid h-9 w-9 place-items-center rounded-md outline-none transition-colors hover:bg-[var(--surface-1)] focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)]"
           aria-label="Open navigation"
         >
-          <Menu className="h-5 w-5" />
+          <AppIcon icon={Menu} className="h-5 w-5" />
         </button>
         <div className="min-w-0 text-center">
           <div className="truncate text-sm font-semibold tracking-tight">
@@ -363,7 +364,7 @@ export function ChessLayout({
           className="grid h-9 w-9 place-items-center rounded-md outline-none transition-colors hover:bg-[var(--surface-1)] focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)]"
           aria-label="Go to lobby"
         >
-          <House className="h-5 w-5" />
+          <AppIcon icon={House} className="h-5 w-5" />
         </Link>
       </header>
 
@@ -387,7 +388,7 @@ export function ChessLayout({
                 className="grid h-9 w-9 place-items-center rounded-md outline-none transition-colors hover:bg-[var(--surface-1)] focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)]"
                 aria-label="Close navigation"
               >
-                <X className="h-5 w-5" />
+                <AppIcon icon={X} className="h-5 w-5" />
               </button>
             </div>
             <div className="mt-7 flex-1">{renderNav(true)}</div>
