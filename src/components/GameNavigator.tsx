@@ -26,6 +26,13 @@ export type GameActions = {
   drawOfferFromMe: boolean;
   drawOfferFromOpponent: boolean;
   onDeleteGame?: () => void;
+  onGameStateChange?: (game: {
+    status: string;
+    winner: "white" | "black" | "draw" | null;
+    pending_draw_offer_by: string | null;
+    result_reason?: string | null;
+    updated_at?: string | null;
+  }) => void;
   onError: (message: string) => void;
 };
 
@@ -234,6 +241,7 @@ export function GameNavigator({
                   canOfferDraw={!gameActions.drawOfferFromOpponent}
                   drawOfferPendingByMe={gameActions.drawOfferFromMe}
                   onError={gameActions.onError}
+                  onGameStateChange={gameActions.onGameStateChange}
                 />
               )}
               {gameActions.onDeleteGame && (

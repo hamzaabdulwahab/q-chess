@@ -7,12 +7,20 @@ interface DrawOfferBannerProps {
   gameId: number;
   offererUsername: string | null;
   onError: (message: string) => void;
+  onGameStateChange?: (game: {
+    status: string;
+    winner: "white" | "black" | "draw" | null;
+    pending_draw_offer_by: string | null;
+    result_reason?: string | null;
+    updated_at?: string | null;
+  }) => void;
 }
 
 export function DrawOfferBanner({
   gameId,
   offererUsername,
   onError,
+  onGameStateChange,
 }: DrawOfferBannerProps) {
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
 
@@ -24,11 +32,14 @@ export function DrawOfferBanner({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        game?: Parameters<NonNullable<typeof onGameStateChange>>[0];
+      };
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
         onError(data.error || `Failed to ${action} draw`);
+      } else if (data.game) {
+        onGameStateChange?.(data.game);
       }
     } catch {
       onError("Network error");

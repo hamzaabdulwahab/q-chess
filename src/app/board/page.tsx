@@ -23,10 +23,14 @@ import {
   type MoveHistoryEntry,
 } from "@/components/MoveHistory";
 import {
+  GAME_STATE_BROADCAST_EVENT,
   MOVE_BROADCAST_EVENT,
+  type GameStateBroadcastPayload,
   type MoveBroadcastPayload,
   gameChannelName,
+  isGameStateBroadcastPayload,
   isMoveBroadcastPayload,
+  sendGameStateBroadcast,
   sendMoveBroadcast,
 } from "@/lib/multiplayer/game-channel";
 import { isBotLevel, type BotLevel } from "@/lib/stockfish/types";
@@ -61,6 +65,14 @@ type MoveRow = {
   is_en_passant?: boolean;
   is_promotion?: boolean;
   created_at?: string | null;
+};
+
+type DrawGameState = {
+  status: string;
+  winner: "white" | "black" | "draw" | null;
+  pending_draw_offer_by: string | null;
+  result_reason?: string | null;
+  updated_at?: string | null;
 };
 
 const extractCapturedPieces = (moves: MoveRow[]) => {
@@ -1158,6 +1170,46 @@ function BoardContent() {
     currentUserId != null &&
     pendingDrawOfferBy === currentUserId;
 
+  const applyDrawGameState = useCallback(
+    (game: DrawGameState, options?: { broadcast?: boolean }) => {
+      setPendingDrawOfferBy(game.pending_draw_offer_by ?? null);
+      setGameState((prev) => ({
+        ...prev,
+        gameStatus: game.status || prev.gameStatus,
+        winner: game.winner ?? null,
+      }));
+
+      if (game.status === "active") {
+        setGameOver(null);
+      } else {
+        setSkipEndScreen(false);
+      }
+
+      if (
+        options?.broadcast === false ||
+        !channelRef.current ||
+        !effectiveGameId ||
+        !isMultiplayerGame ||
+        !currentUserIdRef.current
+      ) {
+        return;
+      }
+
+      const payload: GameStateBroadcastPayload = {
+        gameId: effectiveGameId,
+        senderId: currentUserIdRef.current,
+        pendingDrawOfferBy: game.pending_draw_offer_by ?? null,
+        gameStatus: game.status,
+        winner: game.winner ?? null,
+        resultReason: game.result_reason ?? null,
+        updatedAt: game.updated_at ?? new Date().toISOString(),
+      };
+
+      void sendGameStateBroadcast(channelRef.current, payload).catch(() => {});
+    },
+    [effectiveGameId, isMultiplayerGame],
+  );
+
   // Helpers for the side-panel layout. Bottom-of-board is the local
   // player's color (or white in local hot-seat). Captures: capturedPieces
   // is keyed by the COLOR that was captured, so a player's own captures
@@ -1517,6 +1569,26 @@ function BoardContent() {
         },
       )
       .on(
+        "broadcast",
+        { event: GAME_STATE_BROADCAST_EVENT },
+        ({ payload }) => {
+          if (!isGameStateBroadcastPayload(payload)) return;
+          if (payload.gameId !== effectiveGameId) return;
+          if (payload.senderId === currentUserIdRef.current) return;
+
+          applyDrawGameState(
+            {
+              status: payload.gameStatus,
+              winner: payload.winner,
+              pending_draw_offer_by: payload.pendingDrawOfferBy,
+              result_reason: payload.resultReason ?? null,
+              updated_at: payload.updatedAt,
+            },
+            { broadcast: false },
+          );
+        },
+      )
+      .on(
         "postgres_changes",
         {
           event: "UPDATE",
@@ -1538,7 +1610,13 @@ function BoardContent() {
       channelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [effectiveGameId, loadGameData, supabase, applyOpponentMove]);
+  }, [
+    applyDrawGameState,
+    applyOpponentMove,
+    effectiveGameId,
+    loadGameData,
+    supabase,
+  ]);
 
   // Memoize the navigator open change callback to prevent unnecessary re-renders
   const handleNavigatorOpenChange = useCallback((open: boolean) => {
@@ -1666,6 +1744,7 @@ function BoardContent() {
                 gameId={effectiveGameId}
                 offererUsername={opponentUsername}
                 onError={(msg) => setToast(msg)}
+                onGameStateChange={applyDrawGameState}
               />
             )}
 
@@ -1794,6 +1873,7 @@ function BoardContent() {
               canOfferDraw={!drawOfferFromOpponent}
               drawOfferPendingByMe={drawOfferFromMe}
               onError={(msg) => setToast(msg)}
+              onGameStateChange={applyDrawGameState}
             />
           )}
           <div className="grid grid-cols-3 gap-2">
@@ -1869,6 +1949,7 @@ function BoardContent() {
                 drawOfferFromMe,
                 drawOfferFromOpponent,
                 onDeleteGame: deleteCurrentGame,
+                onGameStateChange: applyDrawGameState,
                 onError: (msg) => setToast(msg),
               }
             : undefined

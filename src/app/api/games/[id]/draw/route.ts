@@ -4,9 +4,12 @@ import { getSupabaseServer } from "@/lib/supabase-server";
 type GameRow = {
   id: number;
   status: string;
+  winner: "white" | "black" | "draw" | null;
   white_user_id: string | null;
   black_user_id: string | null;
   pending_draw_offer_by: string | null;
+  result_reason?: string | null;
+  updated_at?: string | null;
 };
 
 async function loadGame(
@@ -16,12 +19,29 @@ async function loadGame(
   const { data, error } = await supabase
     .from("games")
     .select(
-      "id, status, white_user_id, black_user_id, pending_draw_offer_by",
+      "id, status, winner, white_user_id, black_user_id, pending_draw_offer_by, result_reason, updated_at",
     )
     .eq("id", gameId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as GameRow | null) ?? null;
+}
+
+async function loadDrawState(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  gameId: number,
+) {
+  const game = await loadGame(supabase, gameId);
+  return {
+    game: {
+      id: gameId,
+      status: game?.status ?? "active",
+      winner: game?.winner ?? null,
+      pending_draw_offer_by: game?.pending_draw_offer_by ?? null,
+      result_reason: game?.result_reason ?? null,
+      updated_at: game?.updated_at ?? new Date().toISOString(),
+    },
+  };
 }
 
 function ensureParticipant(game: GameRow, userId: string): void {
@@ -84,7 +104,11 @@ export async function POST(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      status: "offered",
+      ...(await loadDrawState(supabase, gameId)),
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to offer draw";
@@ -170,7 +194,11 @@ export async function PATCH(
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-      return NextResponse.json({ success: true, status: "cancelled" });
+      return NextResponse.json({
+        success: true,
+        status: "cancelled",
+        ...(await loadDrawState(supabase, gameId)),
+      });
     }
 
     // accept / decline are responses by the opponent of the offerer
@@ -189,7 +217,11 @@ export async function PATCH(
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-      return NextResponse.json({ success: true, status: "declined" });
+      return NextResponse.json({
+        success: true,
+        status: "declined",
+        ...(await loadDrawState(supabase, gameId)),
+      });
     }
 
     // accept → end the game as a draw
@@ -209,7 +241,11 @@ export async function PATCH(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ success: true, status: "accepted" });
+    return NextResponse.json({
+      success: true,
+      status: "accepted",
+      ...(await loadDrawState(supabase, gameId)),
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update draw offer";

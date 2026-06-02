@@ -30,6 +30,7 @@ export function gameChannelName(gameId: number): string {
 }
 
 export const MOVE_BROADCAST_EVENT = "move";
+export const GAME_STATE_BROADCAST_EVENT = "game-state";
 
 export interface MoveBroadcastPayload {
   // Game scope — listener must drop messages where this != current gameId.
@@ -79,6 +80,34 @@ export function isMoveBroadcastPayload(
   );
 }
 
+export interface GameStateBroadcastPayload {
+  gameId: number;
+  senderId: string;
+  pendingDrawOfferBy: string | null;
+  gameStatus: string;
+  winner: "white" | "black" | "draw" | null;
+  resultReason?: string | null;
+  updatedAt: string;
+}
+
+export function isGameStateBroadcastPayload(
+  value: unknown,
+): value is GameStateBroadcastPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.gameId === "number" &&
+    typeof v.senderId === "string" &&
+    (typeof v.pendingDrawOfferBy === "string" || v.pendingDrawOfferBy === null) &&
+    typeof v.gameStatus === "string" &&
+    (v.winner === "white" ||
+      v.winner === "black" ||
+      v.winner === "draw" ||
+      v.winner === null) &&
+    typeof v.updatedAt === "string"
+  );
+}
+
 export async function sendMoveBroadcast(
   channel: RealtimeChannel,
   payload: MoveBroadcastPayload,
@@ -86,6 +115,17 @@ export async function sendMoveBroadcast(
   await channel.send({
     type: "broadcast",
     event: MOVE_BROADCAST_EVENT,
+    payload,
+  });
+}
+
+export async function sendGameStateBroadcast(
+  channel: RealtimeChannel,
+  payload: GameStateBroadcastPayload,
+): Promise<void> {
+  await channel.send({
+    type: "broadcast",
+    event: GAME_STATE_BROADCAST_EVENT,
     payload,
   });
 }

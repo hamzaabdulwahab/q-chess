@@ -11,6 +11,13 @@ interface InGameToolbarProps {
   canOfferDraw: boolean;
   drawOfferPendingByMe: boolean;
   onError: (message: string) => void;
+  onGameStateChange?: (game: {
+    status: string;
+    winner: "white" | "black" | "draw" | null;
+    pending_draw_offer_by: string | null;
+    result_reason?: string | null;
+    updated_at?: string | null;
+  }) => void;
 }
 
 // Vertical stack sized to fit inside the GameNavigator drawer.
@@ -20,6 +27,7 @@ export function InGameToolbar({
   canOfferDraw,
   drawOfferPendingByMe,
   onError,
+  onGameStateChange,
 }: InGameToolbarProps) {
   const [confirmResign, setConfirmResign] = useState(false);
   const [busy, setBusy] = useState<"resign" | "offer-draw" | "cancel-draw" | null>(
@@ -55,22 +63,28 @@ export function InGameToolbar({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "cancel" }),
         });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          game?: Parameters<NonNullable<typeof onGameStateChange>>[0];
+        };
         if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as {
-            error?: string;
-          };
           onError(data.error || "Failed to cancel draw");
+        } else if (data.game) {
+          onGameStateChange?.(data.game);
         }
       } else {
         setBusy("offer-draw");
         const res = await fetch(`/api/games/${gameId}/draw`, {
           method: "POST",
         });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          game?: Parameters<NonNullable<typeof onGameStateChange>>[0];
+        };
         if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as {
-            error?: string;
-          };
           onError(data.error || "Failed to offer draw");
+        } else if (data.game) {
+          onGameStateChange?.(data.game);
         }
       }
     } catch {
