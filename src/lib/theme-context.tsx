@@ -262,29 +262,37 @@ interface ThemeProviderProps {
   gameId?: string | number | null;
 }
 
+const GLOBAL_THEME_KEY = "chess-theme-global";
+const DEFAULT_THEME_ID = "green";
+
+function isValidThemeId(themeId: string | null): themeId is string {
+  return Boolean(themeId && chessThemes.some((theme) => theme.id === themeId));
+}
+
 export function ThemeProvider({ children, gameId }: ThemeProviderProps) {
-  const [currentThemeId, setCurrentThemeId] = useState('green');
-  
-  // Load theme from localStorage on mount, specific to game or global
+  const [currentThemeId, setCurrentThemeId] = useState(DEFAULT_THEME_ID);
+
+  // Board theme is a global user preference. Older builds stored it per game;
+  // read that once as a migration fallback, then write the global key.
   useEffect(() => {
-    let themeKey: string;
-    
-    if (gameId) {
-      // Per-game theme storage
-      themeKey = `chess-theme-game-${gameId}`;
-    } else {
-      // Global theme storage for non-game pages
-      themeKey = 'chess-theme-global';
-    }
-    
-    const savedTheme = localStorage.getItem(themeKey);
-    
-    if (savedTheme && chessThemes.find(t => t.id === savedTheme)) {
-      setCurrentThemeId(savedTheme);
-    } else {
-      // If no saved theme for this context, set green as default and save it
-      setCurrentThemeId('green');
-      localStorage.setItem(themeKey, 'green');
+    try {
+      const savedGlobal = localStorage.getItem(GLOBAL_THEME_KEY);
+      if (isValidThemeId(savedGlobal)) {
+        setCurrentThemeId(savedGlobal);
+        return;
+      }
+
+      const legacyGameTheme = gameId
+        ? localStorage.getItem(`chess-theme-game-${gameId}`)
+        : null;
+      const nextTheme = isValidThemeId(legacyGameTheme)
+        ? legacyGameTheme
+        : DEFAULT_THEME_ID;
+
+      setCurrentThemeId(nextTheme);
+      localStorage.setItem(GLOBAL_THEME_KEY, nextTheme);
+    } catch {
+      setCurrentThemeId(DEFAULT_THEME_ID);
     }
   }, [gameId]);
 
@@ -292,17 +300,11 @@ export function ThemeProvider({ children, gameId }: ThemeProviderProps) {
     const theme = chessThemes.find(t => t.id === themeId);
     if (theme) {
       setCurrentThemeId(themeId);
-      
-      let themeKey: string;
-      if (gameId) {
-        // Save theme specific to this game
-        themeKey = `chess-theme-game-${gameId}`;
-      } else {
-        // Save global theme
-        themeKey = 'chess-theme-global';
+      try {
+        localStorage.setItem(GLOBAL_THEME_KEY, themeId);
+      } catch {
+        // Theme still applies for this render if storage is unavailable.
       }
-      
-      localStorage.setItem(themeKey, themeId);
     }
   };
 
