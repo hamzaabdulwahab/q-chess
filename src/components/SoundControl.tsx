@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Volume2, VolumeX } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 import { soundManager } from "@/lib/sound-manager";
 
 interface SoundControlProps {
@@ -45,9 +46,9 @@ export const SoundControl: React.FC<SoundControlProps> = ({
         aria-pressed={isEnabled}
       >
         {isEnabled ? (
-          <Volume2 className="h-4 w-4" />
+          <AppIcon icon={Volume2} className="h-4 w-4" />
         ) : (
-          <VolumeX className="h-4 w-4" />
+          <AppIcon icon={VolumeX} className="h-4 w-4" />
         )}
         <span>{isEnabled ? "Sound on" : "Sound off"}</span>
       </button>
@@ -64,9 +65,9 @@ export const SoundControl: React.FC<SoundControlProps> = ({
         aria-expanded={isOpen}
       >
         {isEnabled ? (
-          <Volume2 className="h-4 w-4" />
+          <AppIcon icon={Volume2} className="h-4 w-4" />
         ) : (
-          <VolumeX className="h-4 w-4" />
+          <AppIcon icon={VolumeX} className="h-4 w-4" />
         )}
         <span className="hidden sm:inline">
           {isEnabled ? "Sound on" : "Sound off"}

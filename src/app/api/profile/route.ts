@@ -17,14 +17,30 @@ export async function GET() {
     .single();
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
 
-  type Meta = { full_name?: string; username?: string };
+  type Meta = {
+    avatar_url?: string;
+    full_name?: string;
+    name?: string;
+    picture?: string;
+    username?: string;
+  };
   const meta = (userRes.user.user_metadata || {}) as Meta;
+  const metadataAvatarUrl = meta.avatar_url || meta.picture || null;
+  const avatarUrl = prof?.avatar_url ?? metadataAvatarUrl;
+
+  if (!prof?.avatar_url && metadataAvatarUrl) {
+    await supabase
+      .from("profiles")
+      .update({ avatar_url: metadataAvatarUrl })
+      .eq("id", uid);
+  }
+
   return NextResponse.json({
     id: uid,
     email: userRes.user.email,
-    full_name: prof?.full_name ?? meta.full_name ?? null,
+    full_name: prof?.full_name ?? meta.full_name ?? meta.name ?? null,
     username: prof?.username ?? meta.username ?? null,
-    avatar_url: prof?.avatar_url ?? null,
+    avatar_url: avatarUrl,
   });
 }
 

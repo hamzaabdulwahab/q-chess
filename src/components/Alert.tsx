@@ -7,6 +7,7 @@ import {
   CircleAlert,
   X as CloseIcon,
 } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 
 type Variant = "error" | "success" | "info" | "warning";
 type Tone = "soft" | "solid" | "outline";
@@ -36,10 +37,10 @@ const toneMap: Record<Variant, Record<Tone, string>> = {
 
 function Icon({ variant }: { variant: Variant }) {
   const cls = "w-4 h-4 mt-0.5 shrink-0";
-  if (variant === "success") return <CheckCircle2 className={cls} />;
-  if (variant === "info") return <Info className={cls} />;
-  if (variant === "warning") return <TriangleAlert className={cls} />;
-  return <CircleAlert className={cls} />; // error
+  if (variant === "success") return <AppIcon icon={CheckCircle2} className={cls} />;
+  if (variant === "info") return <AppIcon icon={Info} className={cls} />;
+  if (variant === "warning") return <AppIcon icon={TriangleAlert} className={cls} />;
+  return <AppIcon icon={CircleAlert} className={cls} />; // error
 }
 
 export function Alert({
@@ -75,7 +76,7 @@ export function Alert({
           className="ml-2 text-white/80 hover:text-white"
           type="button"
         >
-          <CloseIcon className="w-4 h-4" />
+          <AppIcon icon={CloseIcon} className="w-4 h-4" />
         </button>
       )}
     </div>

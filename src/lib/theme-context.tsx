@@ -272,8 +272,8 @@ function isValidThemeId(themeId: string | null): themeId is string {
 export function ThemeProvider({ children, gameId }: ThemeProviderProps) {
   const [currentThemeId, setCurrentThemeId] = useState(DEFAULT_THEME_ID);
 
-  // Board theme is a global user preference. Older builds stored it per game;
-  // read that once as a migration fallback, then write the global key.
+  // Board theme is a global user preference. Without a saved preference,
+  // always start from Forest Green.
   useEffect(() => {
     try {
       const savedGlobal = localStorage.getItem(GLOBAL_THEME_KEY);
@@ -282,15 +282,8 @@ export function ThemeProvider({ children, gameId }: ThemeProviderProps) {
         return;
       }
 
-      const legacyGameTheme = gameId
-        ? localStorage.getItem(`chess-theme-game-${gameId}`)
-        : null;
-      const nextTheme = isValidThemeId(legacyGameTheme)
-        ? legacyGameTheme
-        : DEFAULT_THEME_ID;
-
-      setCurrentThemeId(nextTheme);
-      localStorage.setItem(GLOBAL_THEME_KEY, nextTheme);
+      setCurrentThemeId(DEFAULT_THEME_ID);
+      localStorage.setItem(GLOBAL_THEME_KEY, DEFAULT_THEME_ID);
     } catch {
       setCurrentThemeId(DEFAULT_THEME_ID);
     }

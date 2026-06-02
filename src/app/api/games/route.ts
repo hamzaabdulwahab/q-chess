@@ -163,7 +163,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const success = await ChessService.deleteGame(parseInt(gameId));
+    const success = await ChessService.deleteGame(parseInt(gameId), user.id);
 
     if (success) {
       // Defensive cache clear

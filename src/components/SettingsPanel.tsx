@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Settings, X } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 import {
   type ChessAppSettings,
   useSettings,
@@ -65,7 +66,7 @@ export function SettingsPanel({ className = "" }: { className?: string }) {
         onClick={() => setOpen(true)}
         className={`btn-secondary inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm ${className}`}
       >
-        <Settings className="h-4 w-4" aria-hidden="true" />
+        <AppIcon icon={Settings} className="h-4 w-4" />
         <span>Settings</span>
       </button>
 
@@ -92,7 +93,7 @@ export function SettingsPanel({ className = "" }: { className?: string }) {
                 className="btn-ghost rounded-md p-1.5"
                 aria-label="Close settings"
               >
-                <X className="h-4 w-4" />
+                <AppIcon icon={X} className="h-4 w-4" />
               </button>
             </div>
 

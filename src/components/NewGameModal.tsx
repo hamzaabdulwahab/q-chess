@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Users, UserPlus, Inbox, Bot, X } from "lucide-react";
+import { Bot, Inbox, UserPlus, Users, X, type LucideIcon } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 
 export type NewGameChoice =
   | "local-2v2"
@@ -14,7 +15,7 @@ interface Option {
   id: Exclude<NewGameChoice, null>;
   label: string;
   description: string;
-  Icon: React.ComponentType<{ className?: string }>;
+  Icon: LucideIcon;
   primary?: boolean;
 }
 
@@ -113,7 +114,7 @@ export function NewGameModal({
             className="btn-ghost rounded-md p-1.5"
             aria-label="Close"
           >
-            <X className="h-4 w-4" />
+            <AppIcon icon={X} className="h-4 w-4" />
           </button>
         </header>
 
@@ -141,7 +142,7 @@ export function NewGameModal({
                         color: "var(--text)",
                       }}
                     >
-                      <Icon className="h-4 w-4" />
+                      <AppIcon icon={Icon} className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span

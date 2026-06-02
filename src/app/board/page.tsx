@@ -40,9 +40,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
-  Plus,
   RotateCw,
+  SquarePlus,
 } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
 
 type Profile = {
   username: string;
@@ -172,9 +173,106 @@ function BoardContent() {
 
   // Keep the move-history panel collapsed on every fresh page load.
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(true);
+  const sidePanelSwipeRef = useRef<{
+    startX: number;
+    startY: number;
+    tracking: boolean;
+  } | null>(null);
   const [boardFlipped, setBoardFlipped] = useState(false);
+  const [isMobileBoard, setIsMobileBoard] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 767px)").matches;
+  });
   const toggleSidePanel = useCallback(() => {
     setSidePanelCollapsed((prev) => !prev);
+  }, []);
+  const handleSidePanelTouchStart = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      if (sidePanelCollapsed) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+      sidePanelSwipeRef.current = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        tracking: true,
+      };
+    },
+    [sidePanelCollapsed],
+  );
+  const handleSidePanelTouchMove = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      const gesture = sidePanelSwipeRef.current;
+      const touch = event.touches[0];
+      if (!gesture?.tracking || !touch) return;
+
+      const deltaX = touch.clientX - gesture.startX;
+      const deltaY = touch.clientY - gesture.startY;
+      if (Math.abs(deltaX) > 20 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+        event.preventDefault();
+      }
+    },
+    [],
+  );
+  const handleSidePanelTouchEnd = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      const gesture = sidePanelSwipeRef.current;
+      const touch = event.changedTouches[0];
+      sidePanelSwipeRef.current = null;
+      if (!gesture?.tracking || !touch) return;
+
+      const deltaX = touch.clientX - gesture.startX;
+      const deltaY = touch.clientY - gesture.startY;
+      if (deltaX > 64 && Math.abs(deltaY) < 80) {
+        setSidePanelCollapsed(true);
+      }
+    },
+    [],
+  );
+  const handleSidePanelPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      if (sidePanelCollapsed) return;
+      sidePanelSwipeRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        tracking: true,
+      };
+    },
+    [sidePanelCollapsed],
+  );
+  const handleSidePanelPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      const gesture = sidePanelSwipeRef.current;
+      if (!gesture?.tracking) return;
+
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+      if (Math.abs(deltaX) > 20 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+        event.preventDefault();
+      }
+    },
+    [],
+  );
+  const handleSidePanelPointerUp = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      const gesture = sidePanelSwipeRef.current;
+      sidePanelSwipeRef.current = null;
+      if (!gesture?.tracking) return;
+
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+      if (deltaX > 64 && Math.abs(deltaY) < 80) {
+        setSidePanelCollapsed(true);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobileBoard(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
   }, []);
 
   // Global keyboard shortcut for navigator toggle - always active
@@ -713,7 +811,7 @@ function BoardContent() {
       ? remoteColorFromParticipants ?? youColorParam ?? null
       : null;
 
-  const localBoardOrientation: "white" | "black" = settings.autoFlipBoard
+  const localBoardOrientation: "white" | "black" = settings.autoFlipBoard && !isMobileBoard
     ? fenTurn
     : "white";
   const baseBoardOrientation: "white" | "black" = isFixedColorGame
@@ -729,6 +827,39 @@ function BoardContent() {
     isFixedColorGame &&
     Boolean(effectiveGameId) &&
     (myRemoteColor ? myRemoteColor !== fenTurn : true);
+
+  useEffect(() => {
+    if (!effectiveGameId || !isMultiplayerGame) return;
+    if (gameState.gameStatus !== "active") return;
+
+    const activeTimeLeft =
+      gameState.currentTurn === "white"
+        ? clocks.whiteTimeLeftMs
+        : clocks.blackTimeLeftMs;
+    if (activeTimeLeft == null || !clocks.lastMoveAt) return;
+
+    const lastMoveAtMs = new Date(clocks.lastMoveAt).getTime();
+    if (!Number.isFinite(lastMoveAtMs)) return;
+
+    const remainingMs = Math.max(
+      0,
+      activeTimeLeft - (Date.now() - lastMoveAtMs),
+    );
+    const id = window.setTimeout(() => {
+      void loadGameData(effectiveGameId, { resetClocks: false });
+    }, remainingMs + 250);
+
+    return () => window.clearTimeout(id);
+  }, [
+    clocks.blackTimeLeftMs,
+    clocks.lastMoveAt,
+    clocks.whiteTimeLeftMs,
+    effectiveGameId,
+    gameState.currentTurn,
+    gameState.gameStatus,
+    isMultiplayerGame,
+    loadGameData,
+  ]);
 
   // Keep a ref of the local player's color so loadGameData (which has []
   // deps) can detect opponent-vs-self moves without retriggering when the
@@ -1414,6 +1545,28 @@ function BoardContent() {
     setNavigatorOpen(open);
   }, []);
 
+  const deleteCurrentGame = useCallback(async () => {
+    if (!effectiveGameId) return;
+    const confirmed = window.confirm(
+      "Delete this game? This removes it from your games and cannot be undone.",
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/games?id=${effectiveGameId}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        setToast(data.error || "Failed to delete game");
+        return;
+      }
+      window.location.href = "/";
+    } catch {
+      setToast("Failed to delete game");
+    }
+  }, [effectiveGameId]);
+
   // Do not block the board on non-fatal errors; show inline banners instead
 
   return (
@@ -1610,9 +1763,19 @@ function BoardContent() {
         className={`fixed bottom-0 right-0 top-14 z-40 flex flex-col overflow-hidden border-l bg-[#111] text-white shadow-2xl transition-transform duration-[250ms] ease-out md:top-0 ${
           sidePanelCollapsed ? "translate-x-full" : "translate-x-0"
         }`}
+        onTouchStart={handleSidePanelTouchStart}
+        onTouchMove={handleSidePanelTouchMove}
+        onTouchEnd={handleSidePanelTouchEnd}
+        onPointerDown={handleSidePanelPointerDown}
+        onPointerMove={handleSidePanelPointerMove}
+        onPointerUp={handleSidePanelPointerUp}
+        onPointerCancel={() => {
+          sidePanelSwipeRef.current = null;
+        }}
         style={{
           borderColor: "rgba(255,255,255,0.08)",
           overscrollBehavior: "contain",
+          touchAction: "pan-y",
           width: "min(82vw, 280px)",
         }}
         aria-label="Move history"
@@ -1639,7 +1802,7 @@ function BoardContent() {
               onClick={resetGame}
               className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full border border-white/15 bg-white/[0.03] px-2 py-2 text-xs font-medium text-gray-100 transition-colors hover:border-white/25 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
             >
-              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <AppIcon icon={SquarePlus} className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">New</span>
             </button>
             <button
@@ -1647,7 +1810,7 @@ function BoardContent() {
               onClick={() => setBoardFlipped((value) => !value)}
               className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full border border-white/15 bg-white/[0.03] px-2 py-2 text-xs font-medium text-gray-100 transition-colors hover:border-white/25 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
             >
-              <RotateCw className="h-3.5 w-3.5 shrink-0" />
+              <AppIcon icon={RotateCw} className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">Flip</span>
             </button>
             <button
@@ -1655,7 +1818,7 @@ function BoardContent() {
               onClick={() => setNavigatorOpen(true)}
               className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full border border-white/15 bg-white/[0.03] px-2 py-2 text-xs font-medium text-gray-100 transition-colors hover:border-white/25 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
             >
-              <Menu className="h-3.5 w-3.5 shrink-0" />
+              <AppIcon icon={Menu} className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">Menu</span>
             </button>
           </div>
@@ -1673,9 +1836,9 @@ function BoardContent() {
         title={sidePanelCollapsed ? "Open move history" : "Hide move history"}
       >
         {sidePanelCollapsed ? (
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          <AppIcon icon={ChevronLeft} className="h-4 w-4" />
         ) : (
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          <AppIcon icon={ChevronRight} className="h-4 w-4" />
         )}
       </button>
       </div>
@@ -1699,12 +1862,13 @@ function BoardContent() {
           loadGame(acceptedGameId);
         }}
         gameActions={
-          isMultiplayerGame && effectiveGameId && !isGameOver
+          effectiveGameId
             ? {
                 gameId: effectiveGameId,
-                isActive: true,
+                isActive: isMultiplayerGame && !isGameOver,
                 drawOfferFromMe,
                 drawOfferFromOpponent,
+                onDeleteGame: deleteCurrentGame,
                 onError: (msg) => setToast(msg),
               }
             : undefined

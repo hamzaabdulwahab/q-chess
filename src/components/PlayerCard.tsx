@@ -14,6 +14,25 @@ const PIECE_VALUES: Record<PieceType, number> = {
 };
 const PIECE_ORDER: PieceType[] = ["q", "r", "b", "n", "p"];
 const MAX_DISPLAYED_CAPTURES = 8;
+const PIECE_GLYPHS: Record<"white" | "black", Record<PieceType, string>> = {
+  white: {
+    p: "♙",
+    n: "♘",
+    b: "♗",
+    r: "♖",
+    q: "♕",
+    k: "♔",
+  },
+  black: {
+    p: "♟",
+    n: "♞",
+    b: "♝",
+    r: "♜",
+    q: "♛",
+    k: "♚",
+  },
+};
+
 function isPieceType(s: string): s is PieceType {
   return (
     s === "p" || s === "n" || s === "b" || s === "r" || s === "q" || s === "k"
@@ -50,18 +69,6 @@ function formatClock(ms: number): string {
     return `${minutes}:${seconds.toString().padStart(2, "0")}.${tenths}`;
   }
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function pieceImage(piece: PieceType, capturedFromColor: "white" | "black") {
-  const names: Record<PieceType, string> = {
-    p: "pawn",
-    n: "knight",
-    b: "bishop",
-    r: "rook",
-    q: "queen",
-    k: "king",
-  };
-  return `/pieces/${capturedFromColor}-${names[piece]}.png`;
 }
 
 function sumValue(pieces: string[]): number {
@@ -185,15 +192,17 @@ export function PlayerCard({
           <div className="mt-0.5 flex max-w-full items-center gap-1 overflow-hidden">
             <div className="flex min-w-0 shrink items-center -space-x-1">
               {orderedCaptures.slice(0, MAX_DISPLAYED_CAPTURES).map(({ piece, key }) => (
-                <Image
+                <span
                   key={key}
-                  src={pieceImage(piece, capturedFromColor)}
-                  alt=""
-                  width={12}
-                  height={12}
-                  unoptimized
-                  className="shrink-0 opacity-75"
-                />
+                  className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-[3px] text-[12px] font-semibold leading-none opacity-80"
+                  style={{
+                    color: "var(--text-3)",
+                    background: "color-mix(in oklch, var(--surface-1) 72%, transparent)",
+                  }}
+                  aria-hidden="true"
+                >
+                  {PIECE_GLYPHS[capturedFromColor][piece]}
+                </span>
               ))}
             </div>
             {orderedCaptures.length > MAX_DISPLAYED_CAPTURES && (
@@ -218,7 +227,7 @@ export function PlayerCard({
 
       {timeLeftMs != null && (
         <div
-          className="shrink-0 rounded-md px-3 py-1.5 font-mono text-2xl tabular-nums"
+          className="shrink-0 rounded-md px-2.5 py-1.5 font-mono text-lg tabular-nums sm:px-3 sm:text-2xl"
           style={{
             background: live ? "var(--bg)" : "var(--surface-1)",
             color: isCritical
@@ -230,9 +239,9 @@ export function PlayerCard({
                   : "var(--text-3)",
             fontWeight: 700,
             fontVariantNumeric: "tabular-nums",
-            minWidth: "5.5ch",
+            minWidth: "clamp(4.75rem, 22vw, 5.5rem)",
             textAlign: "right",
-            letterSpacing: "0.02em",
+            letterSpacing: 0,
             border: `1px solid ${live ? "var(--text)" : "var(--border)"}`,
           }}
           aria-live={live ? "polite" : "off"}

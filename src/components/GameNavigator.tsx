@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { Archive, CirclePlay, Inbox, Menu, Send, X } from "lucide-react";
+import {
+  Archive,
+  Inbox,
+  Menu,
+  SendHorizontal,
+  SquarePlus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { type NewGameChoice } from "./NewGameModal";
+import { AppIcon } from "@/components/AppIcon";
 import { InviteUserModal } from "@/components/InviteUserModal";
 import { InvitesInboxModal } from "@/components/InvitesInboxModal";
 import { SoundControl } from "@/components/SoundControl";
@@ -16,6 +25,7 @@ export type GameActions = {
   isActive: boolean;
   drawOfferFromMe: boolean;
   drawOfferFromOpponent: boolean;
+  onDeleteGame?: () => void;
   onError: (message: string) => void;
 };
 
@@ -159,7 +169,7 @@ export function GameNavigator({
             aria-controls="game-navigator"
             aria-label="Open menu"
           >
-            <Menu className="h-5 w-5" />
+            <AppIcon icon={Menu} className="h-5 w-5" />
           </button>
 
           {showTooltip && (
@@ -204,12 +214,12 @@ export function GameNavigator({
             aria-label="Close menu"
             title="Close"
           >
-            <X className="h-4 w-4" />
+            <AppIcon icon={X} className="h-4 w-4" />
           </button>
         </header>
 
         <div className="px-5 py-4">
-          {gameActions?.isActive && (
+          {gameActions && (
             <section className="mb-5">
               <div
                 className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
@@ -217,13 +227,36 @@ export function GameNavigator({
               >
                 Current game
               </div>
-              <InGameToolbar
-                gameId={gameActions.gameId}
-                canResign={true}
-                canOfferDraw={!gameActions.drawOfferFromOpponent}
-                drawOfferPendingByMe={gameActions.drawOfferFromMe}
-                onError={gameActions.onError}
-              />
+              {gameActions.isActive && (
+                <InGameToolbar
+                  gameId={gameActions.gameId}
+                  canResign={true}
+                  canOfferDraw={!gameActions.drawOfferFromOpponent}
+                  drawOfferPendingByMe={gameActions.drawOfferFromMe}
+                  onError={gameActions.onError}
+                />
+              )}
+              {gameActions.onDeleteGame && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenChange) onOpenChange(false);
+                    else setInternalOpen(false);
+                    gameActions.onDeleteGame?.();
+                  }}
+                  className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors"
+                  style={{
+                    borderColor:
+                      "color-mix(in oklch, var(--danger) 40%, transparent)",
+                    color: "var(--danger)",
+                    background:
+                      "color-mix(in oklch, var(--danger) 10%, transparent)",
+                  }}
+                >
+                  <AppIcon icon={Trash2} className="h-4 w-4" />
+                  Delete game
+                </button>
+              )}
             </section>
           )}
 
@@ -244,7 +277,7 @@ export function GameNavigator({
                 }}
                 className="btn-accent inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
               >
-                <CirclePlay className="h-4 w-4" aria-hidden="true" />
+                <AppIcon icon={SquarePlus} className="h-4 w-4" />
                 New local game
               </button>
               <button
@@ -256,7 +289,7 @@ export function GameNavigator({
                 }}
                 className="btn-secondary inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
               >
-                <Send className="h-4 w-4" aria-hidden="true" />
+                <AppIcon icon={SendHorizontal} className="h-4 w-4" />
                 Challenge by username
               </button>
               <button
@@ -268,7 +301,7 @@ export function GameNavigator({
                 }}
                 className="btn-secondary inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
               >
-                <Inbox className="h-4 w-4" aria-hidden="true" />
+                <AppIcon icon={Inbox} className="h-4 w-4" />
                 Open invitations
               </button>
             </div>
@@ -294,7 +327,7 @@ export function GameNavigator({
                 onClick={(e) => guardedNav(e, "/archive")}
                 className="btn-ghost inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-center text-sm"
               >
-                <Archive className="h-4 w-4" aria-hidden="true" />
+                <AppIcon icon={Archive} className="h-4 w-4" />
                 Archive
               </Link>
             </div>

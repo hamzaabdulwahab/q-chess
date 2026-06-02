@@ -12,6 +12,8 @@ const coordsToSquare = (file: number, rank: number): string => {
   return String.fromCharCode(97 + file) + (rank + 1);
 };
 
+const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 interface ChessBoardProps {
   gameId?: number;
   fen?: string;
@@ -76,6 +78,7 @@ type DragSnapshot = {
   x: number;
   y: number;
   dragging: boolean;
+  shouldClick: boolean;
   squareSize: number;
 };
 
@@ -182,6 +185,11 @@ interface SquareProps {
     piece: string | null | undefined,
     event: React.PointerEvent<HTMLDivElement>,
   ) => void;
+  onSquareTouchStart: (
+    square: string,
+    piece: string | null | undefined,
+    event: React.TouchEvent<HTMLDivElement>,
+  ) => void;
   fileLabel?: string | null;
   rankLabel?: string | null;
   // When this square is the destination of a move just played, animateFrom
@@ -206,6 +214,7 @@ const Square = React.memo(function Square({
   isCheckingPiece,
   onSquareClick,
   onSquarePointerDown,
+  onSquareTouchStart,
   fileLabel,
   rankLabel,
   animateFrom,
@@ -291,6 +300,7 @@ const Square = React.memo(function Square({
       data-square={square}
       onClick={() => onSquareClick(square)}
       onPointerDown={(event) => onSquarePointerDown(square, piece, event)}
+      onTouchStart={(event) => onSquareTouchStart(square, piece, event)}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       style={{
@@ -459,6 +469,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(
     null,
   );
+  const [lastMoveAnimationEnabled, setLastMoveAnimationEnabled] = useState(false);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragSnapshot | null>(null);
   const dragFrameRef = useRef<number | null>(null);
@@ -469,6 +480,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [dragState, setDragState] = useState<DragSnapshot | null>(null);
   const [dragTargetSquare, setDragTargetSquare] = useState<string | null>(null);
   const suppressClickUntilRef = useRef(0);
+  const suppressNextMoveAnimationRef = useRef(false);
   const moveInFlightRef = useRef(false);
   const [moveInFlight, setMoveInFlight] = useState(false);
   const activeTurn = turnProp ?? gameState.turn;
@@ -480,6 +492,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setConfirmMove(null);
     setPendingMove(null);
     setShowPromotionModal(false);
+    setLastMove(null);
+    setLastMoveAnimationEnabled(false);
+    suppressNextMoveAnimationRef.current = false;
     dragRef.current = null;
     suppressClickUntilRef.current = 0;
     if (dragFrameRef.current !== null) {
@@ -490,6 +505,26 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setDragState(null);
     setDragTargetSquare(null);
   }, [gameId]);
+
+  useEffect(() => {
+    if (gameId || fen !== INITIAL_FEN || currentMoveCount !== 0) return;
+    setSelectedSquare(null);
+    setConfirmMove(null);
+    setPendingMove(null);
+    setShowPromotionModal(false);
+    setLastMove(null);
+    setLastMoveAnimationEnabled(false);
+    suppressNextMoveAnimationRef.current = false;
+    dragRef.current = null;
+    suppressClickUntilRef.current = 0;
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    pendingDragRenderRef.current = null;
+    setDragState(null);
+    setDragTargetSquare(null);
+  }, [currentMoveCount, fen, gameId]);
 
   // Initialize chess service when fen changes. Critical: this fires
   // whenever the `fen` prop changes — *including* when the parent echoes
@@ -538,6 +573,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   useEffect(() => {
     if (!externalLastMove) return;
     setLastMove({ from: externalLastMove.from, to: externalLastMove.to });
+    setLastMoveAnimationEnabled(true);
   }, [externalLastMove]);
 
   const isPromotionMove = useCallback(
@@ -707,6 +743,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           skipEndScreen: false,
         });
         setLastMove({ from, to });
+        setLastMoveAnimationEnabled(!suppressNextMoveAnimationRef.current);
+        suppressNextMoveAnimationRef.current = false;
 
         // Call parent callback immediately with optimistic state
         onMove?.({
@@ -869,6 +907,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             skipEndScreen: false,
           });
           setLastMove({ from, to });
+          setLastMoveAnimationEnabled(!suppressNextMoveAnimationRef.current);
+          suppressNextMoveAnimationRef.current = false;
 
           if (onMove) {
             onMove({
@@ -921,6 +961,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setShowPromotionModal(false);
     setPendingMove(null);
     setSelectedSquare(null);
+    suppressNextMoveAnimationRef.current = false;
   };
 
   const queueOrMakeMove = useCallback(
@@ -950,6 +991,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setPendingMove(null);
     setShowPromotionModal(false);
     setSelectedSquare(null);
+    suppressNextMoveAnimationRef.current = false;
   }, []);
 
   const handleSquareClick = useCallback(
@@ -1068,11 +1110,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       if (isPromotionMove(from, to)) {
         setSelectedSquare(null);
         if (settings.autoPromoteToQueen) {
+          suppressNextMoveAnimationRef.current = true;
           clearDrag();
           await queueOrMakeMove(from, to, "q");
           return;
         }
         setPendingMove({ from, to });
+        suppressNextMoveAnimationRef.current = true;
         setShowPromotionModal(true);
         clearDrag();
         return;
@@ -1080,8 +1124,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
       if (chessService.isMoveLegal(from, to)) {
         setSelectedSquare(null);
-        clearDrag();
+        suppressNextMoveAnimationRef.current = true;
         await queueOrMakeMove(from, to);
+        clearDrag();
         return;
       }
 
@@ -1104,6 +1149,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       piece: string | null | undefined,
       event: React.PointerEvent<HTMLDivElement>,
     ) => {
+      if (event.pointerType === "touch") return;
       if (event.button !== 0 && event.pointerType === "mouse") return;
       if (!canStartPieceDrag(square, piece)) return;
 
@@ -1121,12 +1167,48 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         x: event.clientX,
         y: event.clientY,
         dragging: false,
+        shouldClick: true,
         squareSize,
       };
 
       dragRef.current = nextDrag;
       setDragTargetSquare(square);
       event.currentTarget.setPointerCapture?.(event.pointerId);
+    },
+    [canStartPieceDrag],
+  );
+
+  const handleSquareTouchStart = useCallback(
+    (
+      square: string,
+      piece: string | null | undefined,
+      event: React.TouchEvent<HTMLDivElement>,
+    ) => {
+      if (dragRef.current) return;
+      if (!canStartPieceDrag(square, piece)) return;
+
+      const touch = event.touches[0];
+      const board = boardRef.current;
+      if (!touch || !board || !piece) return;
+
+      const rect = board.getBoundingClientRect();
+      const squareSize = rect.width / 8;
+      const nextDrag: DragSnapshot = {
+        pointerId: -1,
+        from: square,
+        piece,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        x: touch.clientX,
+        y: touch.clientY,
+        dragging: false,
+        shouldClick: true,
+        squareSize,
+      };
+
+      dragRef.current = nextDrag;
+      setDragTargetSquare(square);
+      event.preventDefault();
     },
     [canStartPieceDrag],
   );
@@ -1139,7 +1221,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       const deltaX = event.clientX - current.startX;
       const deltaY = event.clientY - current.startY;
       const dragging =
-        current.dragging || Math.hypot(deltaX, deltaY) > 4;
+        current.dragging || Math.hypot(deltaX, deltaY) > 8;
       const clampedPoint = clampDragPointToBoard(
         event.clientX,
         event.clientY,
@@ -1151,6 +1233,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         x: clampedPoint.x,
         y: clampedPoint.y,
         dragging,
+        shouldClick: current.shouldClick && !dragging,
       };
       dragRef.current = next;
 
@@ -1174,6 +1257,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       if (wasDragging) {
         event.preventDefault();
         void finishDragMove(current.from, to);
+      } else if (current.shouldClick) {
+        clearDrag();
+        void handleSquareClick(current.from);
+        suppressClickUntilRef.current = Date.now() + 120;
       } else {
         clearDrag();
       }
@@ -1198,6 +1285,86 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     clampDragPointToBoard,
     clearDrag,
     finishDragMove,
+    handleSquareClick,
+    scheduleDragRender,
+    squareFromPoint,
+  ]);
+
+  useEffect(() => {
+    const onTouchMove = (event: TouchEvent) => {
+      const current = dragRef.current;
+      const touch = event.touches[0];
+      if (!current || current.pointerId !== -1 || !touch) return;
+
+      const deltaX = touch.clientX - current.startX;
+      const deltaY = touch.clientY - current.startY;
+      const dragging =
+        current.dragging || Math.hypot(deltaX, deltaY) > 8;
+      const clampedPoint = clampDragPointToBoard(
+        touch.clientX,
+        touch.clientY,
+        current.squareSize,
+      );
+
+      const next: DragSnapshot = {
+        ...current,
+        x: clampedPoint.x,
+        y: clampedPoint.y,
+        dragging,
+        shouldClick: current.shouldClick && !dragging,
+      };
+      dragRef.current = next;
+
+      if (dragging) {
+        scheduleDragRender(
+          next,
+          squareFromPoint(touch.clientX, touch.clientY),
+        );
+      }
+      event.preventDefault();
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      const current = dragRef.current;
+      const touch = event.changedTouches[0];
+      if (!current || current.pointerId !== -1 || !touch) return;
+
+      const wasDragging = current.dragging;
+      const to = squareFromPoint(touch.clientX, touch.clientY);
+      suppressClickUntilRef.current = wasDragging ? Date.now() + 120 : 0;
+
+      if (wasDragging) {
+        void finishDragMove(current.from, to);
+      } else if (current.shouldClick) {
+        clearDrag();
+        void handleSquareClick(current.from);
+        suppressClickUntilRef.current = Date.now() + 120;
+      } else {
+        clearDrag();
+      }
+      event.preventDefault();
+    };
+
+    const onTouchCancel = () => {
+      const current = dragRef.current;
+      if (!current || current.pointerId !== -1) return;
+      suppressClickUntilRef.current = 0;
+      clearDrag();
+    };
+
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd, { passive: false });
+    window.addEventListener("touchcancel", onTouchCancel);
+    return () => {
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchCancel);
+    };
+  }, [
+    clampDragPointToBoard,
+    clearDrag,
+    finishDragMove,
+    handleSquareClick,
     scheduleDragRender,
     squareFromPoint,
   ]);
@@ -1229,8 +1396,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     // Detailed moves no longer needed for visual indicators
     // Keep iteration order constant (white-at-bottom); visual flip handled by wrapper
     const isBlackView = orientation === "black";
-    const rankRange = [...Array(8).keys()].reverse();
-    const fileRange = [...Array(8).keys()];
+    const rankRange = isBlackView
+      ? [...Array(8).keys()]
+      : [...Array(8).keys()].reverse();
+    const fileRange = isBlackView
+      ? [...Array(8).keys()].reverse()
+      : [...Array(8).keys()];
     const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
     // Get checking pieces if in check
@@ -1244,14 +1415,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     // delta we hand it must be expressed in board-local coordinates.
     let animateTo: string | null = null;
     let animateOffset: { dx: string; dy: string } | null = null;
-    if (lastMove) {
+    if (lastMove && lastMoveAnimationEnabled) {
       const fromFile = lastMove.from.charCodeAt(0) - 97;
       const fromRank = parseInt(lastMove.from[1], 10) - 1;
       const toFile = lastMove.to.charCodeAt(0) - 97;
       const toRank = parseInt(lastMove.to[1], 10) - 1;
       // White orientation, DOM coords: positive dx = right, positive dy = down.
       // Source position relative to destination square center, in board-local
-      // coordinates (before the .board-rotated parent transform applies):
+      // coordinates:
       //   dx = (sourceFile - targetFile) * 100%
       //   dy = (targetRank - sourceRank) * 100%   (DOM row N+1 is rank N-1)
       const sign = isBlackView ? -1 : 1;
@@ -1297,10 +1468,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const onBottomEdge = isBlackView ? rank === 7 : rank === 0;
         const onLeftEdge = isBlackView ? file === 7 : file === 0;
         const fileLabel = settings.showCoordinates && onBottomEdge
-          ? files[isBlackView ? 7 - file : file]
+          ? files[file]
           : null;
         const rankLabel = settings.showCoordinates && onLeftEdge
-          ? String(isBlackView ? 8 - rank : rank + 1)
+          ? String(rank + 1)
           : null;
 
         squares.push(
@@ -1318,6 +1489,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             isCheckingPiece={Boolean(isCheckingPiece)}
             onSquareClick={handleSquareClick}
             onSquarePointerDown={handleSquarePointerDown}
+            onSquareTouchStart={handleSquareTouchStart}
             fileLabel={fileLabel}
             rankLabel={rankLabel}
             animateFrom={animateFrom}
@@ -1346,12 +1518,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         onCancel={handlePromotionCancel}
       />
 
-      {/* Chess Board - visual rotation is controlled by orientation prop */}
-      <div
-        className={`board-orient ${
-          orientation === "black" ? "board-rotated" : ""
-        }`}
-      >
+      {/* Chess Board - orientation is controlled by render order. */}
+      <div className="board-orient">
         <div
           ref={boardRef}
           className="chess-board-large"

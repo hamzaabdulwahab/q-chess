@@ -372,10 +372,10 @@ body {
 /* Chessboard square size (scaled up) */
 /* Responsive chess squares */
 .chess-square-large {
-  width: calc(min(90vw, 90vh) / 8);
-  height: calc(min(90vw, 90vh) / 8);
-  max-width: calc(95vmin / 8);
-  max-height: calc(95vmin / 8);
+  width: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8);
+  height: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8);
+  max-width: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8);
+  max-height: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -387,34 +387,37 @@ body {
 
 /* Chessboard overall size (responsive to viewport) */
 .chess-board-large {
-  width: min(90vw, 90vh);
-  height: min(90vw, 90vh);
+  width: var(--board-size, min(90dvw, 90dvh, 95vmin));
+  height: var(--board-size, min(90dvw, 90dvh, 95vmin));
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  max-width: 95vmin;
-  max-height: 95vmin;
+  max-width: 100%;
+  max-height: var(--board-size, min(90dvw, 90dvh, 95vmin));
   touch-action: none;
   user-select: none;
   overflow: hidden;
 }
 
-/* Orientation wrapper: rotates board 180deg when black to move */
+/* Orientation wrapper. Squares are rendered in viewer order; avoid transform
+   rotation so mobile input geometry and flipping stay responsive. */
 .board-orient {
-  width: min(90vw, 90vh);
-  height: min(90vw, 90vh);
-  max-width: 95vmin;
-  max-height: 95vmin;
+  width: var(--board-size, min(90dvw, 90dvh, 95vmin));
+  height: var(--board-size, min(90dvw, 90dvh, 95vmin));
+  max-width: 100%;
+  max-height: var(--board-size, min(90dvw, 90dvh, 95vmin));
   backface-visibility: hidden;
-  transform: perspective(900px) translateZ(0) rotateY(0deg) rotate(0deg);
+  transform: translateZ(0);
   transform-origin: center center;
-  transition: transform var(--board-flip-duration) var(--board-flip-ease);
-  will-change: transform;
+}
+
+.board-area-with-panels {
+  --board-size: min(90dvw, 90dvh, 95vmin);
 }
 
 .board-area-with-panels .board-stack {
-  width: min(90vw, 90vh);
-  max-width: 95vmin;
+  width: var(--board-size);
+  max-width: 100%;
 }
 
 /* When the board sits inside the multiplayer 3-column layout we need to
@@ -423,122 +426,75 @@ body {
  * 30rem reserve covers 2x w-52 panels (208px each) + 2x gap-3 (12px) +
  * page px-4 padding + a small buffer. */
 @media (min-width: 1024px) {
-  .board-area-with-panels .chess-board-large,
-  .board-area-with-panels .board-orient {
-    width: min(80vh, calc(100vw - 30rem));
-    height: min(80vh, calc(100vw - 30rem));
-    max-width: calc(100vw - 30rem);
-    max-height: 80vh;
+  .board-area-with-panels {
+    --board-size: min(80dvh, calc(100dvw - 30rem));
   }
+
   .board-area-with-panels .chess-piece-image {
-    width: calc(min(80vh, calc(100vw - 30rem)) / 8 * 1.02);
-    height: calc(min(80vh, calc(100vw - 30rem)) / 8 * 1.02);
-    max-width: calc(min(80vh, calc(100vw - 30rem)) / 8 * 1.02);
-    max-height: calc(min(80vh, calc(100vw - 30rem)) / 8 * 1.02);
-  }
-  .board-area-with-panels .chess-square-large {
-    width: calc(min(80vh, calc(100vw - 30rem)) / 8);
-    height: calc(min(80vh, calc(100vw - 30rem)) / 8);
-    max-width: calc(min(80vh, calc(100vw - 30rem)) / 8);
-    max-height: calc(min(80vh, calc(100vw - 30rem)) / 8);
-  }
-  .board-area-with-panels .board-stack {
-    width: min(80vh, calc(100vw - 30rem));
-    max-width: calc(100vw - 30rem);
+    width: calc(var(--board-size) / 8 * 1.02);
+    height: calc(var(--board-size) / 8 * 1.02);
+    max-width: calc(var(--board-size) / 8 * 1.02);
+    max-height: calc(var(--board-size) / 8 * 1.02);
   }
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
-  .board-area-with-panels .chess-board-large,
-  .board-area-with-panels .board-orient {
-    width: min(calc(100vw - 7rem), 70dvh);
-    height: min(calc(100vw - 7rem), 70dvh);
-    max-width: calc(100vw - 7rem);
-    max-height: 70dvh;
-  }
-
-  .board-area-with-panels .board-stack {
-    width: min(calc(100vw - 7rem), 70dvh);
-    max-width: calc(100vw - 7rem);
-  }
-
-  .board-area-with-panels .chess-square-large {
-    width: calc(min(calc(100vw - 7rem), 70dvh) / 8);
-    height: calc(min(calc(100vw - 7rem), 70dvh) / 8);
-    max-width: calc(min(calc(100vw - 7rem), 70dvh) / 8);
-    max-height: calc(min(calc(100vw - 7rem), 70dvh) / 8);
+  .board-area-with-panels {
+    --board-size: min(calc(100dvw - 8rem), 70dvh);
   }
 
   .board-area-with-panels .chess-piece-image {
-    width: calc(min(calc(100vw - 7rem), 70dvh) / 8 * 1.02);
-    height: calc(min(calc(100vw - 7rem), 70dvh) / 8 * 1.02);
-    max-width: calc(min(calc(100vw - 7rem), 70dvh) / 8 * 1.02);
-    max-height: calc(min(calc(100vw - 7rem), 70dvh) / 8 * 1.02);
+    width: calc(var(--board-size) / 8 * 1.02);
+    height: calc(var(--board-size) / 8 * 1.02);
+    max-width: calc(var(--board-size) / 8 * 1.02);
+    max-height: calc(var(--board-size) / 8 * 1.02);
   }
 }
 
 @media (max-width: 767px) {
-  .board-area-with-panels .chess-board-large,
-  .board-area-with-panels .board-orient {
-    width: min(calc(100vw - 1rem), 62dvh);
-    height: min(calc(100vw - 1rem), 62dvh);
-    max-width: calc(100vw - 1.5rem);
-    max-height: 62dvh;
-  }
-
-  .board-area-with-panels .board-stack {
-    width: min(calc(100vw - 1rem), 62dvh);
-    max-width: calc(100vw - 1.5rem);
-  }
-
-  .board-area-with-panels .chess-square-large {
-    width: calc(min(calc(100vw - 1rem), 62dvh) / 8);
-    height: calc(min(calc(100vw - 1rem), 62dvh) / 8);
-    max-width: calc(min(calc(100vw - 1rem), 62dvh) / 8);
-    max-height: calc(min(calc(100vw - 1rem), 62dvh) / 8);
+  .board-area-with-panels {
+    --board-size: min(calc(100dvw - 3rem), 62dvh);
   }
 
   .board-area-with-panels .chess-piece-image {
-    width: calc(min(calc(100vw - 1rem), 62dvh) / 8 * 1.02);
-    height: calc(min(calc(100vw - 1rem), 62dvh) / 8 * 1.02);
-    max-width: calc(min(calc(100vw - 1rem), 62dvh) / 8 * 1.02);
-    max-height: calc(min(calc(100vw - 1rem), 62dvh) / 8 * 1.02);
+    width: calc(var(--board-size) / 8 * 1.02);
+    height: calc(var(--board-size) / 8 * 1.02);
+    max-width: calc(var(--board-size) / 8 * 1.02);
+    max-height: calc(var(--board-size) / 8 * 1.02);
   }
 }
 
 .board-orient.board-rotated {
-  transform: perspective(900px) translateZ(0) rotateY(360deg) rotate(180deg);
+  transform: translateZ(0);
 }
 
-/* Keep individual pieces upright when wrapper rotates */
 .board-orient.board-rotated .chess-piece-image,
 .board-orient.board-rotated .chess-piece-fallback,
 .board-orient.board-rotated .coord {
-  transform: translateZ(0) rotate(-180deg);
+  transform: translateZ(0);
 }
 
 .board-orient .chess-piece-image,
 .board-orient .chess-piece-fallback,
 .board-orient .coord {
   backface-visibility: hidden;
-  transform: translateZ(0) rotate(0deg);
-  transition: transform var(--board-flip-duration) var(--board-flip-ease);
+  transform: translateZ(0);
   will-change: transform;
 }
 
 /* Chess piece image styling (responsive) */
 .chess-piece-image {
-  width: calc(min(90vw, 90vh) / 8 * 1.02);
-  height: calc(min(90vw, 90vh) / 8 * 1.02);
-  max-width: calc(95vmin / 8 * 1.02);
-  max-height: calc(95vmin / 8 * 1.02);
+  width: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8 * 1.02);
+  height: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8 * 1.02);
+  max-width: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8 * 1.02);
+  max-height: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8 * 1.02);
   object-fit: contain;
   image-rendering: auto;
 }
 
 /* Emoji or fallback character piece (responsive) */
 .chess-piece-fallback {
-  font-size: calc(min(90vw, 90vh) / 8 * 0.87);
+  font-size: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8 * 0.87);
   line-height: 1;
   text-shadow: none;
 }

@@ -6,11 +6,11 @@ import {
   Play,
   Eye,
   Trash2,
-  Crown,
   Handshake,
   Scale,
   HelpCircle,
   Inbox,
+  Trophy,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -29,6 +29,7 @@ import {
   type Category,
   type Winner,
 } from "@/components/ArchiveFilters";
+import { AppIcon } from "@/components/AppIcon";
 
 interface Game {
   id: number;
@@ -307,15 +308,15 @@ function HomeContent() {
     const cls = "w-4 h-4";
     switch (status) {
       case "active":
-        return <Play className={cls} />;
+        return <AppIcon icon={Play} className={cls} />;
       case "checkmate":
-        return <Crown className={cls} />;
+        return <AppIcon icon={Trophy} className={cls} />;
       case "draw":
-        return <Handshake className={cls} />;
+        return <AppIcon icon={Handshake} className={cls} />;
       case "stalemate":
-        return <Scale className={cls} />;
+        return <AppIcon icon={Scale} className={cls} />;
       default:
-        return <HelpCircle className={cls} />;
+        return <AppIcon icon={HelpCircle} className={cls} />;
     }
   };
 
@@ -437,7 +438,7 @@ function HomeContent() {
               onClick={() => setInvitesInboxOpen(true)}
               className="btn-secondary relative inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
             >
-              <Inbox className="h-4 w-4" />
+              <AppIcon icon={Inbox} className="h-4 w-4" />
               Invitations
               {pendingInvitesCount > 0 && (
                 <span
@@ -457,7 +458,7 @@ function HomeContent() {
               onClick={() => setShowNewGameModal(true)}
               className="btn-accent inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-sm"
             >
-              <Play className="h-4 w-4" />
+              <AppIcon icon={Play} className="h-4 w-4" />
               New game
             </button>
         </>
@@ -517,7 +518,7 @@ function HomeContent() {
               href={`/board?id=${activeMultiplayerGame.id}`}
               className="btn-accent inline-flex shrink-0 items-center gap-2 rounded-md px-3.5 py-1.5 text-sm"
             >
-              <Play className="h-3.5 w-3.5" />
+              <AppIcon icon={Play} className="h-3.5 w-3.5" />
               Resume game
             </Link>
           </div>
@@ -544,7 +545,7 @@ function HomeContent() {
               className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs"
               aria-label="Refresh games"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <AppIcon icon={RefreshCw} className="h-3.5 w-3.5" />
               Refresh
             </button>
           </div>
@@ -601,7 +602,7 @@ function HomeContent() {
                     <button
                       type="button"
                       onClick={() => deleteGame(game.id)}
-                      className="rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                      className="rounded p-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
                       style={{ color: "var(--text-3)" }}
                       onMouseEnter={(e) =>
                         (e.currentTarget.style.color = "oklch(0.7 0.16 25)")
@@ -612,7 +613,7 @@ function HomeContent() {
                       title="Delete game"
                       aria-label="Delete game"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <AppIcon icon={Trash2} className="h-4 w-4" />
                     </button>
                   </div>
 
@@ -654,12 +655,12 @@ function HomeContent() {
                   >
                     {game.status === "active" ? (
                       <>
-                        <Play className="h-3.5 w-3.5" />
+                        <AppIcon icon={Play} className="h-3.5 w-3.5" />
                         Resume
                       </>
                     ) : (
                       <>
-                        <Eye className="h-3.5 w-3.5" />
+                        <AppIcon icon={Eye} className="h-3.5 w-3.5" />
                         View
                       </>
                     )}
