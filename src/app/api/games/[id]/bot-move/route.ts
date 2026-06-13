@@ -154,11 +154,18 @@ export async function POST(
     }
 
     // ── Ask the engine ──────────────────────────────────────────────
-    const { bestmove, spentMs } = await searchBestMove(
-      positionDirective,
-      level,
-      getStockfishSearchContext(chess),
-    );
+    const legalMoves = chess.moves({ verbose: true }) as Move[];
+    const forcedMove = legalMoves.length === 1 ? legalMoves[0] : null;
+    const { bestmove, spentMs } = forcedMove
+      ? {
+          bestmove: `${forcedMove.from}${forcedMove.to}${forcedMove.promotion ?? ""}`,
+          spentMs: 0,
+        }
+      : await searchBestMove(
+          positionDirective,
+          level,
+          getStockfishSearchContext(chess),
+        );
 
     // ── Validate engine's move against chess.js. Defence in depth: if
     // the engine returns an illegal move (parser bug, position mismatch)

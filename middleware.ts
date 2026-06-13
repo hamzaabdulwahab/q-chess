@@ -1,33 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
+import {
+  type SupabaseCookieToSet,
+  withAuthCookieDefaults,
+} from "@/lib/supabase-cookies";
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return req.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          res.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          res.cookies.set({ name, value: "", ...options });
-        },
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const { pathname, search } = req.nextUrl;
-
+  const hasSupabaseAuthCookie = req.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-"));
   const isAuthPage =
     pathname.startsWith("/auth/signin") || pathname.startsWith("/auth/signup");
   const isProtected =
@@ -35,33 +17,90 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/board") ||
     pathname.startsWith("/profile");
 
+  if (!hasSupabaseAuthCookie) {
+    if (isProtected) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/auth/signin";
+      if (pathname !== "/") {
+        url.searchParams.set("redirectTo", pathname + (search || ""));
+      }
+      const redirect = NextResponse.redirect(url);
+      redirect.headers.set("Cache-Control", "private, no-store");
+      return redirect;
+    }
+
+    return NextResponse.next({ request: req });
+  }
+
+  let supabaseResponse = NextResponse.next({ request: req });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet: SupabaseCookieToSet[]) {
+          cookiesToSet.forEach(({ name, value }) => {
+            req.cookies.set(name, value);
+          });
+          supabaseResponse = NextResponse.next({ request: req });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            supabaseResponse.cookies.set({
+              name,
+              value,
+              ...withAuthCookieDefaults(options),
+            });
+          });
+          supabaseResponse.headers.set("Cache-Control", "private, no-store");
+        },
+      },
+    }
+  );
+
+  // Keep this call immediately after client creation. It validates and refreshes
+  // the user session before any route protection decisions are made.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   if (isProtected && !user) {
     const url = req.nextUrl.clone();
     url.pathname = "/auth/signin";
     if (pathname !== "/") {
       url.searchParams.set("redirectTo", pathname + (search || ""));
     }
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirect.cookies.set(cookie);
+    });
+    redirect.headers.set("Cache-Control", "private, no-store");
+    return redirect;
   }
 
   if (isAuthPage && user) {
-    return NextResponse.redirect(new URL("/", req.url));
+    const redirect = NextResponse.redirect(new URL("/", req.url));
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirect.cookies.set(cookie);
+    });
+    redirect.headers.set("Cache-Control", "private, no-store");
+    return redirect;
   }
 
-  return res;
+  return supabaseResponse;
 }
 
 export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - icon.svg (icon file)
-     * - public folder files
+     * - static public assets
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|icon.svg|public).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp3|wasm|js|css)$).*)",
   ],
 };

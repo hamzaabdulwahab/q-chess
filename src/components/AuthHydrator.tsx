@@ -9,19 +9,15 @@ export function AuthHydrator() {
       const supabase = getSupabaseBrowser();
       try {
         const { data, error } = await supabase.auth.getUser();
-        if (error || !data.user) {
-          // Clear any persisted session remnants
+        if (!error && !data.user) {
           await supabase.auth.signOut();
           try {
-            // Best-effort clean up of flags we set
             window.localStorage.removeItem("last_username");
           } catch {}
         }
       } catch {
-        // On unexpected errors, also sign out to avoid phantom login state
-        try {
-          await getSupabaseBrowser().auth.signOut();
-        } catch {}
+        // Network or refresh jitter should not force-log out a valid browser
+        // session. Server routes still validate auth before protected data.
       }
     };
     run();

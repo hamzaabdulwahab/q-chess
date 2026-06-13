@@ -224,7 +224,7 @@ create table if not exists public.games (
   fen            text not null,
   pgn            text,
   status         text not null default 'active'
-                 check (status in ('active','checkmate','stalemate','draw','resigned','timeout')),
+                 check (status in ('active','checkmate','stalemate','draw','resigned','timeout','aborted')),
   current_player text not null default 'white'
                  check (current_player in ('white','black')),
   winner         text
@@ -290,7 +290,7 @@ alter table public.games
 
 alter table public.games
   add constraint games_status_check
-  check (status in ('active','checkmate','stalemate','draw','resigned','timeout'));
+  check (status in ('active','checkmate','stalemate','draw','resigned','timeout','aborted'));
 
 alter table public.games
   add constraint games_clock_non_negative
@@ -391,6 +391,11 @@ create index if not exists idx_games_user_id on public.games(user_id);
 create index if not exists idx_games_white_user_id on public.games(white_user_id);
 create index if not exists idx_games_black_user_id on public.games(black_user_id);
 create index if not exists idx_games_mode on public.games(mode);
+create index if not exists idx_games_owner_status_updated on public.games(user_id, status, updated_at desc);
+create index if not exists idx_games_white_status_updated on public.games(white_user_id, status, updated_at desc) where white_user_id is not null;
+create index if not exists idx_games_black_status_updated on public.games(black_user_id, status, updated_at desc) where black_user_id is not null;
+create index if not exists idx_games_active_multiplayer_abort on public.games(status, move_count, current_player, last_move_at) where status = 'active' and white_user_id is not null and black_user_id is not null and move_count <= 1;
+create index if not exists idx_games_active_multiplayer_timeout on public.games(status, current_player, last_move_at) where status = 'active' and white_user_id is not null and black_user_id is not null and time_control_initial_ms is not null and white_time_left_ms is not null and black_time_left_ms is not null;
 
 ------------------------------------------------------------
 -- 5. MOVES
@@ -514,6 +519,7 @@ create policy moves_delete_participant_game
 
 create index if not exists idx_moves_game_id on public.moves(game_id);
 create index if not exists idx_moves_game_id_number on public.moves(game_id, move_number);
+create index if not exists idx_moves_game_id_created_at on public.moves(game_id, created_at);
 
 ------------------------------------------------------------
 -- 6. STORAGE (avatars bucket)

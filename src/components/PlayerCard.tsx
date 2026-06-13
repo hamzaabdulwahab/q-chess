@@ -227,7 +227,7 @@ export function PlayerCard({
 
       {timeLeftMs != null && (
         <div
-          className="shrink-0 rounded-md px-2 py-1 font-mono text-base leading-none tabular-nums sm:px-3 sm:py-1.5 sm:text-2xl"
+          className="shrink-0 rounded-md px-1.5 py-1 font-mono text-sm leading-none tabular-nums sm:px-2.5 sm:py-1.5 sm:text-xl md:text-2xl"
           style={{
             background: live ? "var(--bg)" : "var(--surface-1)",
             color: isCritical
@@ -239,7 +239,7 @@ export function PlayerCard({
                   : "var(--text-3)",
             fontWeight: 700,
             fontVariantNumeric: "tabular-nums",
-            minWidth: "clamp(4.1rem, 18vw, 5.5rem)",
+            minWidth: "clamp(3.7rem, 16vw, 5.25rem)",
             textAlign: "right",
             letterSpacing: 0,
             border: `1px solid ${live ? "var(--text)" : "var(--border)"}`,

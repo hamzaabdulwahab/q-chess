@@ -11,20 +11,15 @@ let cached: SupabaseClient | undefined;
 export function getSupabaseBrowser(): SupabaseClient {
   if (cached) return cached;
 
-  // Persist session based on a user preference stored in localStorage.
-  // Default to true if not set.
-  let persist = true;
-  if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem("remember_me");
-    persist = stored == null ? true : stored === "1";
-  }
-
   cached = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       auth: {
-        persistSession: persist,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: "pkce",
       },
     },
   );

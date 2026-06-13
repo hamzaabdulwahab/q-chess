@@ -1,0 +1,1 @@
+export const MULTIPLAYER_FIRST_MOVE_ABORT_MS = 20_000;

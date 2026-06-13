@@ -9,6 +9,7 @@ export type EndStatus =
   | "draw"
   | "resigned"
   | "timeout"
+  | "aborted"
   | "abandoned";
 
 export type Perspective = "won" | "lost" | "draw" | "neutral";
@@ -47,6 +48,8 @@ function methodLabel(status: EndStatus): string {
       return "by resignation";
     case "timeout":
       return "on time";
+    case "aborted":
+      return "by abort";
     case "abandoned":
       return "by abandonment";
     case "stalemate":

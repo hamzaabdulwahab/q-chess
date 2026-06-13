@@ -132,8 +132,7 @@ export async function DELETE(request: NextRequest) {
     const all = searchParams.get("all");
 
     if (all === "true") {
-      // Delete all games
-      const deletedCount = await ChessService.deleteAllGames();
+      const deletedCount = await ChessService.deleteAllGamesForUser(user.id);
       
       // Defensive cache clear
       try {

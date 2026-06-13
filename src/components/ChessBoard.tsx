@@ -185,11 +185,6 @@ interface SquareProps {
     piece: string | null | undefined,
     event: React.PointerEvent<HTMLDivElement>,
   ) => void;
-  onSquareTouchStart: (
-    square: string,
-    piece: string | null | undefined,
-    event: React.TouchEvent<HTMLDivElement>,
-  ) => void;
   fileLabel?: string | null;
   rankLabel?: string | null;
   // When this square is the destination of a move just played, animateFrom
@@ -214,7 +209,6 @@ const Square = React.memo(function Square({
   isCheckingPiece,
   onSquareClick,
   onSquarePointerDown,
-  onSquareTouchStart,
   fileLabel,
   rankLabel,
   animateFrom,
@@ -300,7 +294,6 @@ const Square = React.memo(function Square({
       data-square={square}
       onClick={() => onSquareClick(square)}
       onPointerDown={(event) => onSquarePointerDown(square, piece, event)}
-      onTouchStart={(event) => onSquareTouchStart(square, piece, event)}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       style={{
@@ -482,6 +475,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const suppressClickUntilRef = useRef(0);
   const suppressNextMoveAnimationRef = useRef(false);
   const moveInFlightRef = useRef(false);
+  const previousGameOverRef = useRef(false);
   const [moveInFlight, setMoveInFlight] = useState(false);
   const activeTurn = turnProp ?? gameState.turn;
 
@@ -559,9 +553,16 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fen, viewMode]);
 
-  // Play game end sounds for draws/stalemates
+  // Play game-end sounds only when a live position transitions into a draw.
   useEffect(() => {
-    if (gameState.gameOver && gameState.winner === "draw" && !viewMode) {
+    const wasGameOver = previousGameOverRef.current;
+    previousGameOverRef.current = gameState.gameOver;
+    if (
+      gameState.gameOver &&
+      !wasGameOver &&
+      gameState.winner === "draw" &&
+      !viewMode
+    ) {
       soundManager.play("game-end");
     }
   }, [gameState.gameOver, gameState.winner, viewMode]);
@@ -1149,7 +1150,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       piece: string | null | undefined,
       event: React.PointerEvent<HTMLDivElement>,
     ) => {
-      if (event.pointerType === "touch") return;
       if (event.button !== 0 && event.pointerType === "mouse") return;
       if (!canStartPieceDrag(square, piece)) return;
 
@@ -1174,41 +1174,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       dragRef.current = nextDrag;
       setDragTargetSquare(square);
       event.currentTarget.setPointerCapture?.(event.pointerId);
-    },
-    [canStartPieceDrag],
-  );
-
-  const handleSquareTouchStart = useCallback(
-    (
-      square: string,
-      piece: string | null | undefined,
-      event: React.TouchEvent<HTMLDivElement>,
-    ) => {
-      if (dragRef.current) return;
-      if (!canStartPieceDrag(square, piece)) return;
-
-      const touch = event.touches[0];
-      const board = boardRef.current;
-      if (!touch || !board || !piece) return;
-
-      const rect = board.getBoundingClientRect();
-      const squareSize = rect.width / 8;
-      const nextDrag: DragSnapshot = {
-        pointerId: -1,
-        from: square,
-        piece,
-        startX: touch.clientX,
-        startY: touch.clientY,
-        x: touch.clientX,
-        y: touch.clientY,
-        dragging: false,
-        shouldClick: true,
-        squareSize,
-      };
-
-      dragRef.current = nextDrag;
-      setDragTargetSquare(square);
-      event.preventDefault();
+      if (event.pointerType === "touch") {
+        event.preventDefault();
+      }
     },
     [canStartPieceDrag],
   );
@@ -1280,85 +1248,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerCancel);
-    };
-  }, [
-    clampDragPointToBoard,
-    clearDrag,
-    finishDragMove,
-    handleSquareClick,
-    scheduleDragRender,
-    squareFromPoint,
-  ]);
-
-  useEffect(() => {
-    const onTouchMove = (event: TouchEvent) => {
-      const current = dragRef.current;
-      const touch = event.touches[0];
-      if (!current || current.pointerId !== -1 || !touch) return;
-
-      const deltaX = touch.clientX - current.startX;
-      const deltaY = touch.clientY - current.startY;
-      const dragging =
-        current.dragging || Math.hypot(deltaX, deltaY) > 8;
-      const clampedPoint = clampDragPointToBoard(
-        touch.clientX,
-        touch.clientY,
-        current.squareSize,
-      );
-
-      const next: DragSnapshot = {
-        ...current,
-        x: clampedPoint.x,
-        y: clampedPoint.y,
-        dragging,
-        shouldClick: current.shouldClick && !dragging,
-      };
-      dragRef.current = next;
-
-      if (dragging) {
-        scheduleDragRender(
-          next,
-          squareFromPoint(touch.clientX, touch.clientY),
-        );
-      }
-      event.preventDefault();
-    };
-
-    const onTouchEnd = (event: TouchEvent) => {
-      const current = dragRef.current;
-      const touch = event.changedTouches[0];
-      if (!current || current.pointerId !== -1 || !touch) return;
-
-      const wasDragging = current.dragging;
-      const to = squareFromPoint(touch.clientX, touch.clientY);
-      suppressClickUntilRef.current = wasDragging ? Date.now() + 120 : 0;
-
-      if (wasDragging) {
-        void finishDragMove(current.from, to);
-      } else if (current.shouldClick) {
-        clearDrag();
-        void handleSquareClick(current.from);
-        suppressClickUntilRef.current = Date.now() + 120;
-      } else {
-        clearDrag();
-      }
-      event.preventDefault();
-    };
-
-    const onTouchCancel = () => {
-      const current = dragRef.current;
-      if (!current || current.pointerId !== -1) return;
-      suppressClickUntilRef.current = 0;
-      clearDrag();
-    };
-
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
-    window.addEventListener("touchend", onTouchEnd, { passive: false });
-    window.addEventListener("touchcancel", onTouchCancel);
-    return () => {
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("touchend", onTouchEnd);
-      window.removeEventListener("touchcancel", onTouchCancel);
     };
   }, [
     clampDragPointToBoard,
@@ -1489,7 +1378,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             isCheckingPiece={Boolean(isCheckingPiece)}
             onSquareClick={handleSquareClick}
             onSquarePointerDown={handleSquarePointerDown}
-            onSquareTouchStart={handleSquareTouchStart}
             fileLabel={fileLabel}
             rankLabel={rankLabel}
             animateFrom={animateFrom}

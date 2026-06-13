@@ -549,28 +549,13 @@ body {
  * The square sets CSS custom properties --piece-dx and --piece-dy, expressed
  * as percentages of one square, telling the piece where it WAS relative to
  * its new home. The keyframe animates from that offset back to 0.
- * Note: when the board is rotated (black orientation), the parent
- * .board-orient gets transform: rotate(180deg) which composes with the
- * piece image's own rotate(180deg). Their combined matrix is identity for
- * pure translations — so the same --piece-dx / --piece-dy values in
- * screen-equivalent space animate correctly in either orientation, provided
- * the caller flips the signs for the black orientation case.
  */
 @keyframes piece-slide-in {
   from {
-    transform: rotate(0deg) translate(var(--piece-dx, 0), var(--piece-dy, 0));
+    transform: translate(var(--piece-dx, 0), var(--piece-dy, 0));
   }
   to {
-    transform: rotate(0deg) translate(0, 0);
-  }
-}
-
-@keyframes piece-slide-in-rotated {
-  from {
-    transform: rotate(-180deg) translate(var(--piece-dx, 0), var(--piece-dy, 0));
-  }
-  to {
-    transform: rotate(-180deg) translate(0, 0);
+    transform: translate(0, 0);
   }
 }
 
@@ -578,11 +563,6 @@ body {
 .piece-animating .chess-piece-fallback {
   animation: piece-slide-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: transform;
-}
-
-.board-orient.board-rotated .piece-animating .chess-piece-image,
-.board-orient.board-rotated .piece-animating .chess-piece-fallback {
-  animation-name: piece-slide-in-rotated;
 }
 
 @media (prefers-reduced-motion: reduce) {

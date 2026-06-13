@@ -3,6 +3,7 @@
 import { Chess } from "chess.js";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { getSupabasePooledClient } from "@/lib/supabase-pooled";
+import { MULTIPLAYER_FIRST_MOVE_ABORT_MS } from "@/lib/game-rules";
 
 type PlayerColor = "white" | "black";
 
@@ -12,10 +13,12 @@ type TimedGameRow = {
   current_player: PlayerColor;
   white_user_id: string | null;
   black_user_id: string | null;
+  move_count: number | null;
   time_control_initial_ms: number | null;
   white_time_left_ms: number | null;
   black_time_left_ms: number | null;
   last_move_at: string | null;
+  started_at: string | null;
 };
 
 export class ChessService {
@@ -75,11 +78,61 @@ export class ChessService {
     };
   }
 
+  private static getOpeningAbortPatch(row: TimedGameRow, now = new Date()) {
+    if (
+      row.status !== "active" ||
+      !row.white_user_id ||
+      !row.black_user_id
+    ) {
+      return null;
+    }
+
+    const moveCount = Number(row.move_count ?? 0);
+    if (
+      (moveCount !== 0 || row.current_player !== "white") &&
+      (moveCount !== 1 || row.current_player !== "black")
+    ) {
+      return null;
+    }
+
+    const clockStart = row.last_move_at ?? row.started_at;
+    if (!clockStart) return null;
+
+    const clockStartMs = new Date(clockStart).getTime();
+    if (!Number.isFinite(clockStartMs)) return null;
+
+    const elapsedMs = Math.max(0, now.getTime() - clockStartMs);
+    if (elapsedMs < MULTIPLAYER_FIRST_MOVE_ABORT_MS) return null;
+
+    const winner: PlayerColor = row.current_player === "white" ? "black" : "white";
+    const nowIso = now.toISOString();
+
+    return {
+      status: "aborted",
+      winner,
+      ended_at: nowIso,
+      result_reason:
+        row.current_player === "white"
+          ? "white_first_move_abort"
+          : "black_first_reply_abort",
+      pending_draw_offer_by: null,
+      last_move_at: nowIso,
+      updated_at: nowIso,
+    };
+  }
+
+  private static getTerminalPatch(row: TimedGameRow, now = new Date()) {
+    return (
+      ChessService.getOpeningAbortPatch(row, now) ||
+      ChessService.getTimedOutPatch(row, now)
+    );
+  }
+
   private static async finalizeExpiredTimedGame(
     row: TimedGameRow,
     userId: string,
   ) {
-    const patch = ChessService.getTimedOutPatch(row);
+    const patch = ChessService.getTerminalPatch(row);
     if (!patch) return null;
 
     const supabase = getSupabaseServer();
@@ -100,12 +153,82 @@ export class ChessService {
     return data?.[0] ?? null;
   }
 
+  static async finalizeStaleActiveMultiplayerGames(limit = 100): Promise<{
+    checked: number;
+    finalized: Array<{
+      id: number;
+      status: string;
+      winner: PlayerColor | "draw" | null;
+      result_reason: string | null;
+    }>;
+  }> {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error(
+        "SUPABASE_SERVICE_ROLE_KEY is required for game maintenance",
+      );
+    }
+
+    const supabase = getSupabasePooledClient();
+    const safeLimit = Math.max(1, Math.min(limit, 500));
+
+    const { data, error } = await supabase
+      .from("games")
+      .select(
+        "id, status, current_player, white_user_id, black_user_id, move_count, time_control_initial_ms, white_time_left_ms, black_time_left_ms, last_move_at, started_at",
+      )
+      .eq("status", "active")
+      .not("white_user_id", "is", null)
+      .not("black_user_id", "is", null)
+      .order("last_move_at", { ascending: true, nullsFirst: true })
+      .limit(safeLimit);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const now = new Date();
+    const finalized: Array<{
+      id: number;
+      status: string;
+      winner: PlayerColor | "draw" | null;
+      result_reason: string | null;
+    }> = [];
+
+    for (const row of (data || []) as TimedGameRow[]) {
+      const patch = ChessService.getTerminalPatch(row, now);
+      if (!patch) continue;
+
+      const { data: updatedRows, error: updateError } = await supabase
+        .from("games")
+        .update(patch)
+        .eq("id", row.id)
+        .eq("status", "active")
+        .select("id, status, winner, result_reason");
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      const updated = updatedRows?.[0] as
+        | {
+            id: number;
+            status: string;
+            winner: PlayerColor | "draw" | null;
+            result_reason: string | null;
+          }
+        | undefined;
+      if (updated) finalized.push(updated);
+    }
+
+    return { checked: data?.length ?? 0, finalized };
+  }
+
   private static async getParticipantGameState(gameId: number, userId: string) {
     const supabase = getSupabaseServer();
     const { data, error } = await supabase
       .from("games")
       .select(
-        "id, status, current_player, white_user_id, black_user_id, time_control_initial_ms, increment_ms, white_time_left_ms, black_time_left_ms, last_move_at"
+        "id, status, current_player, white_user_id, black_user_id, move_count, time_control_initial_ms, increment_ms, white_time_left_ms, black_time_left_ms, last_move_at, started_at"
       )
       .eq("id", gameId)
       .or(ChessService.buildParticipantFilter(userId))
@@ -122,11 +245,13 @@ export class ChessService {
           current_player: "white" | "black";
           white_user_id: string | null;
           black_user_id: string | null;
+          move_count: number | null;
           time_control_initial_ms: number | null;
           increment_ms: number;
           white_time_left_ms: number | null;
           black_time_left_ms: number | null;
           last_move_at: string | null;
+          started_at: string | null;
         }
       | null;
   }
@@ -408,6 +533,7 @@ export class ChessService {
         white_time_left_ms,
         black_time_left_ms,
         last_move_at,
+        started_at,
         created_at,
         updated_at
       `)
@@ -535,14 +661,30 @@ export class ChessService {
     return !error;
   }
 
-  // Delete all games
-  static async deleteAllGames(): Promise<number> {
+  // Delete all games that belong to or include a specific user.
+  static async deleteAllGamesForUser(userId: string): Promise<number> {
     const supabase = ChessService.getClient();
-    await supabase.from("moves").delete().neq("id", 0);
-    const { error } = await supabase.from("games").delete().neq("id", 0);
+
+    const { data: games, error: lookupError } = await supabase
+      .from("games")
+      .select("id")
+      .or(ChessService.buildParticipantFilter(userId));
+
+    if (lookupError) throw new Error(lookupError.message);
+
+    const gameIds = (games || [])
+      .map((game: { id: number }) => game.id)
+      .filter((id: number) => Number.isFinite(id));
+
+    if (gameIds.length === 0) return 0;
+
+    await supabase.from("moves").delete().in("game_id", gameIds);
+    const { error } = await supabase
+      .from("games")
+      .delete()
+      .in("id", gameIds);
     if (error) throw new Error(error.message);
-    // We don't know exact count without requesting it; return 0 to indicate success
-    return 0;
+    return gameIds.length;
   }
 
   static async searchUsers(query: string, currentUserId: string): Promise<
@@ -584,7 +726,7 @@ export class ChessService {
     const { data, error } = await supabase
       .from("games")
       .select(
-        "id, status, current_player, white_user_id, black_user_id, time_control_initial_ms, white_time_left_ms, black_time_left_ms, last_move_at"
+        "id, status, current_player, white_user_id, black_user_id, move_count, time_control_initial_ms, white_time_left_ms, black_time_left_ms, last_move_at, started_at"
       )
       .eq("status", "active")
       .not("white_user_id", "is", null)
@@ -953,11 +1095,15 @@ export class ChessService {
         actingUserId,
       );
       if (timeoutPatch) {
+        const status = String(timeoutPatch.status || "timeout");
         return {
           success: false,
-          gameStatus: "timeout",
+          gameStatus: status,
           winner: timeoutPatch.winner as "white" | "black",
-          error: "Time has expired",
+          error:
+            status === "aborted"
+              ? "Game aborted due to opening inactivity"
+              : "Time has expired",
         };
       }
 

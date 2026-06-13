@@ -22,6 +22,23 @@ export const metadata: Metadata = {
   },
 };
 
+const themeBootScript = `
+(() => {
+  try {
+    const key = "chess-theme-global";
+    const userSetKey = "chess-theme-global-user-set";
+    const saved = window.localStorage.getItem(key);
+    const userSet = window.localStorage.getItem(userSetKey) === "true";
+    const theme = userSet && saved ? saved : "green";
+    document.documentElement.dataset.chessTheme = theme;
+    if (!userSet) {
+      window.localStorage.setItem(key, "green");
+      window.localStorage.setItem(userSetKey, "false");
+    }
+  } catch {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,6 +50,9 @@ export default function RootLayout({
       className={`${GeistSans.variable} ${GeistSans.className}`}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body className="antialiased" suppressHydrationWarning>
         <SettingsProvider>
           <ThemeProvider>

@@ -263,41 +263,57 @@ interface ThemeProviderProps {
 }
 
 const GLOBAL_THEME_KEY = "chess-theme-global";
+const GLOBAL_THEME_USER_SET_KEY = "chess-theme-global-user-set";
 const DEFAULT_THEME_ID = "green";
 
 function isValidThemeId(themeId: string | null): themeId is string {
   return Boolean(themeId && chessThemes.some((theme) => theme.id === themeId));
 }
 
+function persistThemePreference(themeId: string, userSet: boolean) {
+  try {
+    localStorage.setItem(GLOBAL_THEME_KEY, themeId);
+    localStorage.setItem(GLOBAL_THEME_USER_SET_KEY, userSet ? "true" : "false");
+    document.cookie = `${GLOBAL_THEME_KEY}=${themeId}; Path=/; SameSite=Lax; Max-Age=31536000`;
+    document.documentElement.dataset.chessTheme = themeId;
+  } catch {
+  }
+}
+
+function loadInitialThemeId(): string {
+  if (typeof window === "undefined") return DEFAULT_THEME_ID;
+
+  try {
+    const savedGlobal = localStorage.getItem(GLOBAL_THEME_KEY);
+    const userSet =
+      localStorage.getItem(GLOBAL_THEME_USER_SET_KEY) === "true";
+
+    if (userSet && isValidThemeId(savedGlobal)) {
+      document.documentElement.dataset.chessTheme = savedGlobal;
+      return savedGlobal;
+    }
+
+    persistThemePreference(DEFAULT_THEME_ID, false);
+    return DEFAULT_THEME_ID;
+  } catch {
+    return DEFAULT_THEME_ID;
+  }
+}
+
 export function ThemeProvider({ children, gameId }: ThemeProviderProps) {
-  const [currentThemeId, setCurrentThemeId] = useState(DEFAULT_THEME_ID);
+  const [currentThemeId, setCurrentThemeId] = useState(loadInitialThemeId);
 
   // Board theme is a global user preference. Without a saved preference,
   // always start from Forest Green.
   useEffect(() => {
-    try {
-      const savedGlobal = localStorage.getItem(GLOBAL_THEME_KEY);
-      if (isValidThemeId(savedGlobal)) {
-        setCurrentThemeId(savedGlobal);
-        return;
-      }
-
-      setCurrentThemeId(DEFAULT_THEME_ID);
-      localStorage.setItem(GLOBAL_THEME_KEY, DEFAULT_THEME_ID);
-    } catch {
-      setCurrentThemeId(DEFAULT_THEME_ID);
-    }
+    setCurrentThemeId(loadInitialThemeId());
   }, [gameId]);
 
   const setTheme = (themeId: string) => {
     const theme = chessThemes.find(t => t.id === themeId);
     if (theme) {
       setCurrentThemeId(themeId);
-      try {
-        localStorage.setItem(GLOBAL_THEME_KEY, themeId);
-      } catch {
-        // Theme still applies for this render if storage is unavailable.
-      }
+      persistThemePreference(themeId, true);
     }
   };
 

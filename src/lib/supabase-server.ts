@@ -1,5 +1,9 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import {
+  type SupabaseCookieToSet,
+  withAuthCookieDefaults,
+} from "@/lib/supabase-cookies";
 
 // Server-side Supabase client using cookies for auth in Next.js App Router
 export function getSupabaseServer() {
@@ -8,17 +12,20 @@ export function getSupabaseServer() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        async get(name: string) {
+        async getAll() {
           const store = await cookies();
-          return store.get(name)?.value;
+          return store.getAll();
         },
-        async set(name: string, value: string, options: CookieOptions) {
+        async setAll(cookiesToSet: SupabaseCookieToSet[]) {
           const store = await cookies();
-          store.set({ name, value, ...options });
-        },
-        async remove(name: string, options: CookieOptions) {
-          const store = await cookies();
-          store.set({ name, value: "", ...options });
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              store.set(name, value, withAuthCookieDefaults(options));
+            });
+          } catch {
+            // Server Components cannot write cookies. Middleware refreshes the
+            // session and writes the browser-visible cookies for those renders.
+          }
         },
       },
       db: {

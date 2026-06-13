@@ -40,12 +40,14 @@ import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { useSettings } from "@/lib/settings-context";
 import { soundManager } from "@/lib/sound-manager";
 import { ChessClient } from "@/lib/chess-client";
+import { MULTIPLAYER_FIRST_MOVE_ABORT_MS } from "@/lib/game-rules";
 import {
   ChevronLeft,
   ChevronRight,
   Menu,
   RotateCw,
   SquarePlus,
+  Trash2,
 } from "lucide-react";
 import { AppIcon } from "@/components/AppIcon";
 
@@ -844,19 +846,31 @@ function BoardContent() {
     if (!effectiveGameId || !isMultiplayerGame) return;
     if (gameState.gameStatus !== "active") return;
 
+    const openingAbortApplies =
+      (gameState.moveHistory.length === 0 &&
+        gameState.currentTurn === "white") ||
+      (gameState.moveHistory.length === 1 &&
+        gameState.currentTurn === "black");
+
     const activeTimeLeft =
       gameState.currentTurn === "white"
         ? clocks.whiteTimeLeftMs
         : clocks.blackTimeLeftMs;
-    if (activeTimeLeft == null || !clocks.lastMoveAt) return;
+    if (!clocks.lastMoveAt) return;
 
     const lastMoveAtMs = new Date(clocks.lastMoveAt).getTime();
     if (!Number.isFinite(lastMoveAtMs)) return;
 
-    const remainingMs = Math.max(
-      0,
-      activeTimeLeft - (Date.now() - lastMoveAtMs),
-    );
+    const elapsedMs = Date.now() - lastMoveAtMs;
+    const timeoutRemainingMs =
+      activeTimeLeft == null ? Number.POSITIVE_INFINITY : activeTimeLeft - elapsedMs;
+    const abortRemainingMs = openingAbortApplies
+      ? MULTIPLAYER_FIRST_MOVE_ABORT_MS - elapsedMs
+      : Number.POSITIVE_INFINITY;
+    const remainingMs = Math.max(0, Math.min(timeoutRemainingMs, abortRemainingMs));
+
+    if (!Number.isFinite(remainingMs)) return;
+
     const id = window.setTimeout(() => {
       void loadGameData(effectiveGameId, { resetClocks: false });
     }, remainingMs + 250);
@@ -869,6 +883,7 @@ function BoardContent() {
     effectiveGameId,
     gameState.currentTurn,
     gameState.gameStatus,
+    gameState.moveHistory.length,
     isMultiplayerGame,
     loadGameData,
   ]);
@@ -1876,7 +1891,11 @@ function BoardContent() {
               onGameStateChange={applyDrawGameState}
             />
           )}
-          <div className="grid grid-cols-3 gap-2">
+          <div
+            className={`grid gap-2 ${
+              effectiveGameId ? "grid-cols-4" : "grid-cols-3"
+            }`}
+          >
             <button
               type="button"
               onClick={resetGame}
@@ -1901,6 +1920,23 @@ function BoardContent() {
               <AppIcon icon={Menu} className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">Menu</span>
             </button>
+            {effectiveGameId && (
+              <button
+                type="button"
+                onClick={deleteCurrentGame}
+                className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                style={{
+                  borderColor:
+                    "color-mix(in oklch, var(--danger) 38%, transparent)",
+                  background:
+                    "color-mix(in oklch, var(--danger) 10%, transparent)",
+                  color: "var(--danger)",
+                }}
+              >
+                <AppIcon icon={Trash2} className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Delete</span>
+              </button>
+            )}
           </div>
         </footer>
       </aside>
