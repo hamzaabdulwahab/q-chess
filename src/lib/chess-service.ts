@@ -547,11 +547,20 @@ export class ChessService {
 
     const resolvedGamesData = await Promise.all(
       (gamesData || []).map(async (game: any) => {
-        const timeoutPatch = await ChessService.finalizeExpiredTimedGame(
-          game as TimedGameRow,
-          userId,
-        );
-        return timeoutPatch ? { ...game, ...timeoutPatch } : game;
+        try {
+          const timeoutPatch = await ChessService.finalizeExpiredTimedGame(
+            game as TimedGameRow,
+            userId,
+          );
+          return timeoutPatch ? { ...game, ...timeoutPatch } : game;
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Unknown error";
+          console.warn(
+            `[games] Skipping timed status finalization for game ${game.id}: ${message}`,
+          );
+          return game;
+        }
       }),
     );
 
