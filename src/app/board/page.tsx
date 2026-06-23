@@ -1899,7 +1899,7 @@ function BoardContent() {
           )}
           <div
             className={`grid gap-2 ${
-              effectiveGameId ? "grid-cols-4" : "grid-cols-3"
+              effectiveGameId ? "grid-cols-2" : "grid-cols-3"
             }`}
           >
             <button
