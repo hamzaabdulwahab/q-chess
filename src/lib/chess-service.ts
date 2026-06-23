@@ -3,7 +3,10 @@
 import { Chess } from "chess.js";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { getSupabasePooledClient } from "@/lib/supabase-pooled";
-import { MULTIPLAYER_FIRST_MOVE_ABORT_MS } from "@/lib/game-rules";
+import {
+  ABANDON_FORFEIT_MS,
+  MULTIPLAYER_FIRST_MOVE_ABORT_MS,
+} from "@/lib/game-rules";
 
 type PlayerColor = "white" | "black";
 
@@ -104,12 +107,14 @@ export class ChessService {
     const elapsedMs = Math.max(0, now.getTime() - clockStartMs);
     if (elapsedMs < MULTIPLAYER_FIRST_MOVE_ABORT_MS) return null;
 
-    const winner: PlayerColor = row.current_player === "white" ? "black" : "white";
     const nowIso = now.toISOString();
 
+    // An abort is a NO-RESULT: neither player is credited a win/loss (the spec
+    // requires no rating/stat change). It is encoded purely via status +
+    // result_reason, with winner left null.
     return {
       status: "aborted",
-      winner,
+      winner: null as PlayerColor | "draw" | null,
       ended_at: nowIso,
       result_reason:
         row.current_player === "white"
@@ -117,6 +122,36 @@ export class ChessService {
           : "black_first_reply_abort",
       pending_draw_offer_by: null,
       last_move_at: nowIso,
+      updated_at: nowIso,
+    };
+  }
+
+  // Mid-game abandonment forfeiture. `lastSeenSideToMoveMs` is the last presence
+  // heartbeat (ms epoch) from the player whose turn it is, or null if they have
+  // never been seen. We only forfeit someone we have seen and then lost — never
+  // due to missing heartbeat data.
+  private static getAbandonmentPatch(
+    row: TimedGameRow,
+    lastSeenSideToMoveMs: number | null,
+    now = new Date(),
+  ) {
+    if (row.status !== "active" || !row.white_user_id || !row.black_user_id) {
+      return null;
+    }
+    // The opening window is handled by getOpeningAbortPatch.
+    if (Number(row.move_count ?? 0) < 2) return null;
+    if (lastSeenSideToMoveMs == null) return null;
+    if (now.getTime() - lastSeenSideToMoveMs < ABANDON_FORFEIT_MS) return null;
+
+    const winner: PlayerColor =
+      row.current_player === "white" ? "black" : "white";
+    const nowIso = now.toISOString();
+    return {
+      status: "abandoned",
+      winner,
+      ended_at: nowIso,
+      result_reason: `${row.current_player}_abandoned`,
+      pending_draw_offer_by: null,
       updated_at: nowIso,
     };
   }
@@ -151,6 +186,16 @@ export class ChessService {
     }
 
     return data?.[0] ?? null;
+  }
+
+  // Public finalize for a single game from a user-facing route (e.g. resign):
+  // applies the opening-abort / time-control terminal patch if it is due, so a
+  // game that should already be aborted/timed-out is not overwritten with a
+  // different terminal status. Returns the applied terminal row, or null.
+  static async finalizeExpiredGameForUser(gameId: number, userId: string) {
+    const row = await ChessService.getParticipantGameState(gameId, userId);
+    if (!row) return null;
+    return ChessService.finalizeExpiredTimedGame(row as TimedGameRow, userId);
   }
 
   static async finalizeStaleActiveMultiplayerGames(limit = 100): Promise<{
@@ -194,8 +239,49 @@ export class ChessService {
       result_reason: string | null;
     }> = [];
 
-    for (const row of (data || []) as TimedGameRow[]) {
-      const patch = ChessService.getTerminalPatch(row, now);
+    const rows = (data || []) as TimedGameRow[];
+
+    // Fetch presence for the candidate games in one query so we can detect
+    // mid-game abandonment (the side-to-move went silent past the opening).
+    const presenceByGame = new Map<
+      number,
+      { white: number | null; black: number | null }
+    >();
+    const gameIds = rows.map((r) => r.id);
+    if (gameIds.length > 0) {
+      const { data: presenceRows } = await supabase
+        .from("game_presence")
+        .select("game_id, color, last_seen_at")
+        .in("game_id", gameIds);
+      for (const p of (presenceRows ?? []) as Array<{
+        game_id: number;
+        color: "white" | "black";
+        last_seen_at: string | null;
+      }>) {
+        const entry = presenceByGame.get(p.game_id) ?? {
+          white: null,
+          black: null,
+        };
+        const ms = p.last_seen_at ? new Date(p.last_seen_at).getTime() : null;
+        if (p.color === "white") entry.white = ms;
+        else entry.black = ms;
+        presenceByGame.set(p.game_id, entry);
+      }
+    }
+
+    for (const row of rows) {
+      // Opening-abort / time-control first, then abandonment forfeiture.
+      let patch:
+        | Record<string, unknown>
+        | null = ChessService.getTerminalPatch(row, now);
+      if (!patch) {
+        const presence = presenceByGame.get(row.id);
+        const lastSeenSideToMove =
+          row.current_player === "white"
+            ? presence?.white ?? null
+            : presence?.black ?? null;
+        patch = ChessService.getAbandonmentPatch(row, lastSeenSideToMove, now);
+      }
       if (!patch) continue;
 
       const { data: updatedRows, error: updateError } = await supabase
@@ -220,7 +306,7 @@ export class ChessService {
       if (updated) finalized.push(updated);
     }
 
-    return { checked: data?.length ?? 0, finalized };
+    return { checked: rows.length, finalized };
   }
 
   private static async getParticipantGameState(gameId: number, userId: string) {
@@ -564,34 +650,18 @@ export class ChessService {
       }),
     );
 
-    // Get move counts for these games in a single query
-    const gameIds = resolvedGamesData.map((game: any) => game.id);
-    let moveCounts: Record<number, number> = {};
-    
-    if (gameIds.length > 0) {
-      const { data: moveCountsData, error: moveCountsError } = await supabase
-        .from("moves")
-        .select("game_id")
-        .in("game_id", gameIds);
-
-      if (!moveCountsError && moveCountsData) {
-        // Count moves per game
-        moveCounts = moveCountsData.reduce((acc: Record<number, number>, move: any) => {
-          acc[move.game_id] = (acc[move.game_id] || 0) + 1;
-          return acc;
-        }, {});
-      }
-    }
-
-    // Transform the data to include move count
+    // move_count is maintained atomically by the record_move / record_bot_move
+    // RPCs, so the list reads it straight off each row. This removes a third
+    // round-trip that previously fetched every move id for the page just to
+    // count them in JS.
     const gamesLight = resolvedGamesData.map((game: any) => ({
       ...game,
-      totalMoves: moveCounts[game.id] || 0,
+      totalMoves: (game.move_count as number) ?? 0,
     }));
 
     return {
       games: gamesLight,
-      total: count || 0
+      total: count || 0,
     };
   }
 
@@ -1108,7 +1178,12 @@ export class ChessService {
         return {
           success: false,
           gameStatus: status,
-          winner: timeoutPatch.winner as "white" | "black",
+          // undefined for an aborted (no-result) game; the colour for a flag-fall.
+          winner: (timeoutPatch.winner ?? undefined) as
+            | "white"
+            | "black"
+            | "draw"
+            | undefined,
           error:
             status === "aborted"
               ? "Game aborted due to opening inactivity"

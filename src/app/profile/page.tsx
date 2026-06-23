@@ -8,7 +8,7 @@ import {
   LogOut,
   Trash2,
 } from "lucide-react";
-import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { signOutAndRedirect } from "@/lib/auth-context";
 import { AppIcon } from "@/components/AppIcon";
 import { Avatar } from "@/components/Avatar";
 import { ChessLayout } from "@/components/ChessLayout";
@@ -135,9 +135,7 @@ export default function ProfilePage() {
   };
 
   const logout = async () => {
-    const supabase = getSupabaseBrowser();
-    await supabase.auth.signOut();
-    router.replace("/auth/signin");
+    await signOutAndRedirect();
   };
 
   const isDirty = useMemo(

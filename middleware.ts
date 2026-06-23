@@ -17,18 +17,13 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/board") ||
     pathname.startsWith("/profile");
 
-  if (!hasSupabaseAuthCookie) {
-    if (isProtected) {
-      const url = req.nextUrl.clone();
-      url.pathname = "/auth/signin";
-      if (pathname !== "/") {
-        url.searchParams.set("redirectTo", pathname + (search || ""));
-      }
-      const redirect = NextResponse.redirect(url);
-      redirect.headers.set("Cache-Control", "private, no-store");
-      return redirect;
-    }
-
+  // Only skip the Supabase round-trip for truly public, cookie-less requests.
+  // Protected and auth routes ALWAYS validate through getUser() below, so route
+  // protection never depends on a fragile cookie-name heuristic — a stale or
+  // orphaned "sb-" cookie can no longer misfire the gate, and a future cookie
+  // naming change cannot silently disable protection. Public routes that still
+  // carry an auth cookie are refreshed so token rotation propagates.
+  if (!isProtected && !isAuthPage && !hasSupabaseAuthCookie) {
     return NextResponse.next({ request: req });
   }
 

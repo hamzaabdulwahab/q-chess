@@ -64,6 +64,10 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* The move-history drawer is a position:fixed sibling that parks off-screen
+     right (translate-x-full) when collapsed; clip horizontal overflow so it
+     never adds a phantom horizontal scrollbar on mobile. */
+  overflow-x: hidden;
 }
 
 /* Typography helpers */
@@ -345,7 +349,10 @@ body {
   color: #cbd5e1;
   /* slate-300 */
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.8);
-  font-size: calc(min(90vw, 90vh) / 8 * 0.2) !important;
+  /* Scale coordinates off the actual board size (the single source of truth),
+     not the raw viewport — otherwise they are mis-sized relative to the
+     squares whenever the board is capped below the viewport (desktop/tablet). */
+  font-size: calc(var(--board-size, min(90dvw, 90dvh, 95vmin)) / 8 * 0.2) !important;
 }
 
 /* Text and accents */
@@ -568,5 +575,11 @@ body {
 @media (prefers-reduced-motion: reduce) {
   :root {
     --board-flip-duration: 1ms;
+  }
+  /* Honor reduced-motion for piece movement: place pieces instantly instead of
+     sliding them. */
+  .piece-animating .chess-piece-image,
+  .piece-animating .chess-piece-fallback {
+    animation: none !important;
   }
 }

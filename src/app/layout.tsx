@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
+import { cookies } from "next/headers";
 import "./globals.css";
-import { AuthHydrator } from "@/components/AuthHydrator";
+import { AuthProvider } from "@/lib/auth-context";
 import { FloatingUserMenu } from "@/components/FloatingUserMenu";
 import { SettingsProvider } from "@/lib/settings-context";
 import { ThemeProvider } from "@/lib/theme-context";
+import {
+  DEFAULT_THEME_ID,
+  GLOBAL_THEME_KEY,
+  GLOBAL_THEME_USER_SET_KEY,
+  isValidThemeId,
+  themeVarsCss,
+} from "@/lib/themes";
 
 export const metadata: Metadata = {
   title: "Q-Chess",
@@ -22,45 +30,60 @@ export const metadata: Metadata = {
   },
 };
 
+// Read-only pre-paint reconciliation. The server already set data-chess-theme
+// from the cookie (below); if THIS browser has an explicit localStorage choice
+// (e.g. set before cookies were wired up, or its cookie was cleared) prefer it
+// so the attribute matches what the client will render. No writes — seeding the
+// default is now the server's job, removing the previous render-time side effect.
 const themeBootScript = `
 (() => {
   try {
-    const key = "chess-theme-global";
-    const userSetKey = "chess-theme-global-user-set";
-    const saved = window.localStorage.getItem(key);
-    const userSet = window.localStorage.getItem(userSetKey) === "true";
-    const theme = userSet && saved ? saved : "green";
-    document.documentElement.dataset.chessTheme = theme;
-    if (!userSet) {
-      window.localStorage.setItem(key, "green");
-      window.localStorage.setItem(userSetKey, "false");
+    var saved = window.localStorage.getItem("${GLOBAL_THEME_KEY}");
+    var userSet = window.localStorage.getItem("${GLOBAL_THEME_USER_SET_KEY}") === "true";
+    if (userSet && saved) {
+      document.documentElement.dataset.chessTheme = saved;
     }
-  } catch {}
+  } catch (e) {}
 })();
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Resolve the board theme on the server from the persisted cookie so the
+  // correct colors are present on <html> before the first paint (true
+  // zero-flicker); fall back to Forest Green for first-time visitors.
+  const cookieStore = await cookies();
+  const cookieTheme = cookieStore.get(GLOBAL_THEME_KEY)?.value;
+  const initialTheme = isValidThemeId(cookieTheme)
+    ? (cookieTheme as string)
+    : DEFAULT_THEME_ID;
+
   return (
     <html
       lang="en"
+      data-chess-theme={initialTheme}
       className={`${GeistSans.variable} ${GeistSans.className}`}
       suppressHydrationWarning
     >
       <head>
+        <style
+          id="chess-theme-vars"
+          dangerouslySetInnerHTML={{ __html: themeVarsCss() }}
+        />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body className="antialiased" suppressHydrationWarning>
         <SettingsProvider>
           <ThemeProvider>
-            <AuthHydrator />
-            <div className="min-h-screen flex flex-col">
-              <FloatingUserMenu />
-              <main className="flex-1">{children}</main>
-            </div>
+            <AuthProvider>
+              <div className="min-h-screen flex flex-col">
+                <FloatingUserMenu />
+                <main className="flex-1">{children}</main>
+              </div>
+            </AuthProvider>
           </ThemeProvider>
         </SettingsProvider>
       </body>

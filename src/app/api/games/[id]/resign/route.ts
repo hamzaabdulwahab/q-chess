@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase-server";
+import { ChessService } from "@/lib/chess-service";
 
 type GameRow = {
   id: number;
@@ -25,6 +26,21 @@ export async function POST(
     const gameId = Number(id);
     if (!Number.isFinite(gameId) || gameId <= 0) {
       return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
+    }
+
+    // If the game already expired (opening abort / flag fall), finalize it to
+    // its correct terminal status instead of overwriting it with "resigned".
+    const finalized = await ChessService.finalizeExpiredGameForUser(
+      gameId,
+      user.id,
+    );
+    if (finalized && finalized.status !== "active") {
+      return NextResponse.json({
+        success: true,
+        finalized: true,
+        status: finalized.status,
+        winner: finalized.winner ?? null,
+      });
     }
 
     const { data, error } = await supabase

@@ -35,8 +35,8 @@ import {
 } from "@/lib/multiplayer/game-channel";
 import { isBotLevel, type BotLevel } from "@/lib/stockfish/types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { ThemeProvider } from "@/lib/theme-context";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { GameHeartbeat } from "@/components/GameHeartbeat";
 import { useSettings } from "@/lib/settings-context";
 import { soundManager } from "@/lib/sound-manager";
 import { ChessClient } from "@/lib/chess-client";
@@ -1665,6 +1665,10 @@ function BoardContent() {
   return (
     <ChessLayout variant="game" showHeader={false}>
       <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-x-hidden pb-12 text-white md:min-h-screen" style={{ backgroundColor: '#141414' }}>
+      <GameHeartbeat
+        gameId={effectiveGameId}
+        active={isMultiplayerGame && !isGameOver}
+      />
       <div className="container mx-auto flex-0 px-2 py-2 sm:px-4 sm:py-4">
         {/* Clean offline status indicator - styled dialog matching theme */}
         <div className="mb-2 flex items-center gap-3 text-sm text-gray-300">
@@ -1871,6 +1875,8 @@ function BoardContent() {
           overscrollBehavior: "contain",
           touchAction: "pan-y",
           width: "min(82vw, 280px)",
+          // Keep content clear of the notch / rounded corner in landscape.
+          paddingRight: "env(safe-area-inset-right)",
         }}
         aria-label="Move history"
       >
@@ -2034,21 +2040,13 @@ function BoardContent() {
   );
 }
 
-function BoardWithTheme() {
-  const searchParams = useSearchParams();
-  const gameId = searchParams.get("id");
-  
-  return (
-    <ThemeProvider gameId={gameId}>
-      <BoardContent />
-    </ThemeProvider>
-  );
-}
-
 export default function Board() {
+  // Board theme comes from the single global ThemeProvider in the root layout.
+  // The previous nested, gameId-keyed provider re-resolved the theme on every
+  // game navigation and could reset a non-user-set theme — removed.
   return (
     <Suspense fallback={<LoadingSpinner />}>
-      <BoardWithTheme />
+      <BoardContent />
     </Suspense>
   );
 }

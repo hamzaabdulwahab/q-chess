@@ -5,6 +5,11 @@ import { ChessService } from "@/lib/chess-service";
 import { warmStockfishEngine } from "@/lib/stockfish/engine";
 import type { BotColorChoice, BotLevel } from "@/lib/stockfish/types";
 
+// Spawns the Stockfish child process via warmStockfishEngine(), so pin to the
+// Node runtime (not Edge) and allow time for the engine boot.
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 interface CreateBotGameBody {
   color?: BotColorChoice;
   level?: string;
