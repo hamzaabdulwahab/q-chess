@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { signOutAndRedirect } from "@/lib/auth-context";
 import { useEffect, useRef, useState } from "react";
 import { LogOut, Play, UserRound } from "lucide-react";
 import { AppIcon } from "@/components/AppIcon";
@@ -20,9 +20,7 @@ export function FloatingUserMenu() {
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
     setOpen(false);
-    const supabase = getSupabaseBrowser();
-    await supabase.auth.signOut();
-    window.location.href = "/auth/signin";
+    await signOutAndRedirect();
   };
 
   const guardedNav = (e: React.MouseEvent, href: string) => {

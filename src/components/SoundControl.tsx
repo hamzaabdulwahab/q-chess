@@ -14,8 +14,10 @@ export const SoundControl: React.FC<SoundControlProps> = ({
   className = "",
   variant = "panel",
 }) => {
+  // Default to the sound manager's own defaults (enabled, full volume) so the
+  // first paint matches; the effect then syncs any persisted user preference.
   const [isEnabled, setIsEnabled] = useState(true);
-  const [volume, setVolume] = useState(0.5);
+  const [volume, setVolume] = useState(1);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {

@@ -18,11 +18,13 @@ class ChessSoundManager {
   private sounds: Map<ChessSoundType, HTMLAudioElement> = new Map();
   private enabled: boolean = true;
   private volume: number = 1.0;
+  private unlocked: boolean = false;
 
   constructor() {
     if (typeof window !== "undefined") {
       this.initializeSounds();
       this.loadUserPreferences();
+      this.registerUnlockListeners();
     }
   }
 
@@ -73,6 +75,50 @@ class ChessSoundManager {
       localStorage.setItem("chess-sounds-volume", this.volume.toString());
     } catch {
     }
+  }
+
+  // Browsers block HTMLAudioElement.play() until the page has seen a user
+  // gesture. Prime every clip (muted) on the first pointer/key/touch so that
+  // later opponent/bot move sounds — which fire OUTSIDE a gesture — actually
+  // play instead of being silently dropped.
+  private registerUnlockListeners() {
+    if (typeof window === "undefined") return;
+    const events: Array<keyof WindowEventMap> = [
+      "pointerdown",
+      "keydown",
+      "touchstart",
+    ];
+    const handler = () => {
+      this.unlock();
+      events.forEach((event) => window.removeEventListener(event, handler));
+    };
+    events.forEach((event) =>
+      window.addEventListener(event, handler, { passive: true }),
+    );
+  }
+
+  /** Prime all audio elements during a user gesture (idempotent). */
+  unlock() {
+    if (this.unlocked) return;
+    this.unlocked = true;
+    this.sounds.forEach((audio) => {
+      const previousMuted = audio.muted;
+      audio.muted = true;
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === "function") {
+        playPromise
+          .then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.muted = previousMuted;
+          })
+          .catch(() => {
+            audio.muted = previousMuted;
+          });
+      } else {
+        audio.muted = previousMuted;
+      }
+    });
   }
 
   /**

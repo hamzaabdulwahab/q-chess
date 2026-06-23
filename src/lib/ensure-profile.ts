@@ -44,17 +44,33 @@ export async function ensureProfileForUser(
     return;
   }
 
+  // Atomic create. The auth callback route and the client (AuthProvider /
+  // ensure-profile API) can race to create the same profile on first sign-in;
+  // upsert with onConflict:"id" + ignoreDuplicates turns an id collision into a
+  // no-op instead of churning usernames and falsely throwing "Username already
+  // taken". A genuine username collision (a DIFFERENT id) still surfaces as
+  // 23505 and falls through to the suffix retry below.
+  const { error: upsertErr } = await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      username: desired,
+      full_name: fullName,
+      avatar_url: avatarUrl,
+    },
+    { onConflict: "id", ignoreDuplicates: true },
+  );
+
+  if (!upsertErr) return;
+  if ((upsertErr as { code?: string }).code !== "23505") throw upsertErr;
+
   for (let i = 0; i < 5; i++) {
-    const candidate =
-      i === 0 ? desired : `${desired}${Math.floor(Math.random() * 10000)}`;
-    const { error: insErr } = await supabase
-      .from("profiles")
-      .insert({
-        id: user.id,
-        username: candidate,
-        full_name: fullName,
-        avatar_url: avatarUrl,
-      });
+    const candidate = `${desired}${Math.floor(Math.random() * 10000)}`;
+    const { error: insErr } = await supabase.from("profiles").insert({
+      id: user.id,
+      username: candidate,
+      full_name: fullName,
+      avatar_url: avatarUrl,
+    });
 
     if (!insErr) return;
     if ((insErr as { code?: string }).code !== "23505") throw insErr;

@@ -144,55 +144,33 @@ export class ChessClient {
     return piece.color + piece.type.toUpperCase();
   }
 
-  // Get squares of pieces giving check
+  // Get squares of pieces giving check. Single pass over the board using pure
+  // attack geometry (no per-piece Chess(fen) construction). A position is "in
+  // check" only when an enemy piece attacks the side-to-move's king, so every
+  // enemy piece whose attack pattern + clear path reaches the king square is a
+  // checking piece.
   getCheckingPieces(): string[] {
     if (!this.chess.inCheck()) return [];
-    
-    // Get the current position and create a temporary chess instance
-    const currentFen = this.chess.fen();
+
     const currentTurn = this.chess.turn();
     const kingSquare = this.findKingSquare(currentTurn);
-    
     if (!kingSquare) return [];
-    
+
     const checkingPieces: string[] = [];
-    
-    // Try a different approach: create a position without the king and see which pieces can move to the king's square
     const board = this.chess.board();
-    
+
     for (let rank = 0; rank < 8; rank++) {
       for (let file = 0; file < 8; file++) {
         const piece = board[rank][file];
         if (piece && piece.color !== currentTurn) {
           const fromSquare = String.fromCharCode(97 + file) + (8 - rank);
-          
-          // Create a test position where we try to move this piece to the king's square
-          try {
-            const testChess = new Chess(currentFen);
-            
-            // Try to make the move to see if it's a legal attack
-            const testMove = testChess.move({
-              from: fromSquare,
-              to: kingSquare,
-            });
-            
-            if (testMove) {
-              checkingPieces.push(fromSquare);
-            }
-          } catch {
-            // This move is not legal, continue
-          }
-          
-          // Alternative approach: check if this piece type can theoretically attack the king's square
           if (this.canPieceTypeAttackSquare(piece, fromSquare, kingSquare)) {
-            if (!checkingPieces.includes(fromSquare)) {
-              checkingPieces.push(fromSquare);
-            }
+            checkingPieces.push(fromSquare);
           }
         }
       }
     }
-    
+
     return checkingPieces;
   }
 

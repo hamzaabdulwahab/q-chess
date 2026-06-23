@@ -32,6 +32,45 @@ interface GameRow {
   last_move_at: string | null;
 }
 
+// Tiny opening book: instant, sound, varied replies for the strong tiers in
+// the first few plies. Keyed on the space-joined UCI history. Every candidate
+// is validated against chess.js before use (and the downstream re-validation
+// still applies), so a stale entry can never corrupt a game.
+const OPENING_BOOK: Record<string, string[]> = {
+  "": ["e2e4", "d2d4", "g1f3", "c2c4"],
+  "e2e4": ["e7e5", "c7c5", "e7e6", "c7c6"],
+  "d2d4": ["d7d5", "g8f6", "e7e6"],
+  "g1f3": ["g8f6", "d7d5", "c7c5"],
+  "c2c4": ["e7e5", "g8f6", "c7c5"],
+  "e2e4 e7e5": ["g1f3", "f1c4", "b1c3"],
+  "e2e4 c7c5": ["g1f3", "b1c3", "c2c3"],
+  "e2e4 e7e6": ["d2d4", "g1f3"],
+  "e2e4 c7c6": ["d2d4", "b1c3"],
+  "d2d4 d7d5": ["c2c4", "g1f3"],
+  "d2d4 g8f6": ["c2c4", "g1f3"],
+};
+
+function pickOpeningBookMove(fen: string, uciHistory: string[]): string | null {
+  const candidates = OPENING_BOOK[uciHistory.join(" ")];
+  if (!candidates || candidates.length === 0) return null;
+  const legal = candidates.filter((uci) => {
+    const test = new Chess(fen);
+    try {
+      return Boolean(
+        test.move({
+          from: uci.slice(0, 2),
+          to: uci.slice(2, 4),
+          promotion: uci.length > 4 ? uci.slice(4, 5) : undefined,
+        }),
+      );
+    } catch {
+      return false;
+    }
+  });
+  if (legal.length === 0) return null;
+  return legal[Math.floor(Math.random() * legal.length)];
+}
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -153,19 +192,42 @@ export async function POST(
       positionDirective = `fen ${row.fen}`;
     }
 
-    // ── Ask the engine ──────────────────────────────────────────────
+    // ── Choose the move ─────────────────────────────────────────────
+    // Instant fast paths that skip the engine:
+    //   1. Only one legal move — it is forced.
+    //   2. A book opening for the strong tiers in the first few plies (only
+    //      when we have a real UCI history to key on).
+    // Everything else runs a real search so the bot stays strong — we do NOT
+    // speculatively instant-play "obvious" recaptures, which can blunder.
     const legalMoves = chess.moves({ verbose: true }) as Move[];
     const forcedMove = legalMoves.length === 1 ? legalMoves[0] : null;
-    const { bestmove, spentMs } = forcedMove
-      ? {
-          bestmove: `${forcedMove.from}${forcedMove.to}${forcedMove.promotion ?? ""}`,
-          spentMs: 0,
-        }
-      : await searchBestMove(
-          positionDirective,
-          level,
-          getStockfishSearchContext(chess),
-        );
+    const bookMove =
+      !forcedMove &&
+      everyMoveHasUci &&
+      (level === "master" || level === "monster")
+        ? pickOpeningBookMove(
+            row.fen,
+            (priorMoves ?? []).map((m) => m.uci as string),
+          )
+        : null;
+
+    let bestmove: string;
+    let spentMs: number;
+    if (forcedMove) {
+      bestmove = `${forcedMove.from}${forcedMove.to}${forcedMove.promotion ?? ""}`;
+      spentMs = 0;
+    } else if (bookMove) {
+      bestmove = bookMove;
+      spentMs = 0;
+    } else {
+      const result = await searchBestMove(
+        positionDirective,
+        level,
+        getStockfishSearchContext(chess),
+      );
+      bestmove = result.bestmove;
+      spentMs = result.spentMs;
+    }
 
     // ── Validate engine's move against chess.js. Defence in depth: if
     // the engine returns an illegal move (parser bug, position mismatch)

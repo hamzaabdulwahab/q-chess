@@ -53,8 +53,9 @@ if (!globalAny[globalKey]) {
   };
 }
 const engineGlobals: EngineGlobals = globalAny[globalKey];
-const STOCKFISH_HARD_CAP_MS = 1500;
-const STOCKFISH_MOVETIME_CAP_MS = 1300;
+// Upper bound on per-tier movetime. Monster uses 2500ms by default, so the cap
+// sits above it; it only binds if an env override sets an absurd movetime.
+const STOCKFISH_MOVETIME_CAP_MS = 2800;
 
 function getLineListeners(state: EngineProcess): Set<(line: string) => void> {
   return state.listeners;
@@ -212,14 +213,13 @@ interface LevelConfig {
 }
 
 function levelConfig(level: BotLevel): LevelConfig {
-  // Movetimes are tuned to feel near-instant while keeping every tier
-  // well above human strength. Stockfish 18 on the WASM build searches
-  // depth 12-14 in ~250 ms and depth 16-18 in ~450 ms — at depth 14+
-  // the engine is already ~2500 Elo, which is grandmaster territory.
-  // Spending another second per move adds nothing a human can punish.
-  // Override via env if a deployment needs to dial these up or down.
-  const masterMs = Number(process.env.STOCKFISH_MASTER_MOVETIME_MS) || 300;
-  const monsterMs = Number(process.env.STOCKFISH_MONSTER_MOVETIME_MS) || 350;
+  // Tiered timing: lower tiers answer near-instantly while the top tiers get
+  // real think time for a genuinely strong opponent. Forced recaptures, single
+  // legal replies, and book openings are answered instantly UPSTREAM (in the
+  // bot-move route) before the engine is ever consulted, so these movetimes
+  // only apply to positions that actually require a search. All env-overridable.
+  const masterMs = Number(process.env.STOCKFISH_MASTER_MOVETIME_MS) || 1500;
+  const monsterMs = Number(process.env.STOCKFISH_MONSTER_MOVETIME_MS) || 2500;
 
   switch (level) {
     case "beginner":
@@ -230,7 +230,7 @@ function levelConfig(level: BotLevel): LevelConfig {
           // Skill Level is honoured even when UCI_Elo isn't supported.
           { name: "Skill Level", value: 3 },
         ],
-        movetimeMs: 200,
+        movetimeMs: 300,
       };
     case "intermediate":
       return {
@@ -239,7 +239,7 @@ function levelConfig(level: BotLevel): LevelConfig {
           { name: "UCI_Elo", value: 1500 },
           { name: "Skill Level", value: 8 },
         ],
-        movetimeMs: 250,
+        movetimeMs: 500,
       };
     case "advanced":
       return {
@@ -248,7 +248,7 @@ function levelConfig(level: BotLevel): LevelConfig {
           { name: "UCI_Elo", value: 2000 },
           { name: "Skill Level", value: 15 },
         ],
-        movetimeMs: 300,
+        movetimeMs: 800,
       };
     case "master":
       return {
@@ -332,9 +332,15 @@ export async function searchBestMove(
     const positionCommand = `position ${positionSpec}`;
 
     // Build a search promise that resolves on the "bestmove" line. The
-    // engine receives both an adaptive depth target and a short movetime;
-    // the timeout is a hard backstop that sends `stop` before failing.
-    const timeoutMs = STOCKFISH_HARD_CAP_MS;
+    // engine receives both an adaptive depth target and a movetime; the
+    // timeout is a hard backstop that sends `stop` before failing. It is
+    // derived as movetime + the documented request-timeout slack so it always
+    // exceeds the search the engine was asked to run (a previously-hardcoded
+    // 1500ms backstop would prematurely abort the longer Master/Monster
+    // searches and surface spurious "Engine search timed out" errors).
+    const requestTimeoutSlackMs =
+      Number(process.env.STOCKFISH_REQUEST_TIMEOUT_MS) || 4000;
+    const timeoutMs = movetimeMs + requestTimeoutSlackMs;
     const start = Date.now();
     const listeners = getLineListeners(engine);
     const result = await new Promise<string>((resolve, reject) => {

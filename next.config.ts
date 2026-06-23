@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
   // whole bin/ folder for the bot-move route.
   outputFileTracingIncludes: {
     "/api/games/[id]/bot-move": ["./node_modules/stockfish/bin/**"],
+    // These routes also spawn the WASM shim via warmStockfishEngine(); without
+    // tracing the bin/ folder into their bundles the warm-up ENOENTs on Vercel
+    // and the first real bot move pays a cold spawn.
+    "/api/games/bot": ["./node_modules/stockfish/bin/**"],
+    "/api/stockfish/warmup": ["./node_modules/stockfish/bin/**"],
   },
   // Keep `stockfish` as an external require so Next.js doesn't try to
   // bundle its WASM shim through webpack (would mangle the wasm path

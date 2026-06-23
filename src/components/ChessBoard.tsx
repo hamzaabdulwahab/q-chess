@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { preload } from "react-dom";
 import { ChessClient } from "@/lib/chess-client";
 import { useSettings } from "@/lib/settings-context";
 import { soundManager } from "@/lib/sound-manager";
-import { useChessTheme } from "@/lib/theme-context";
 import { GameEndScreen } from "./GameEndScreen";
 
 // Helper functions
@@ -82,68 +82,54 @@ type DragSnapshot = {
   squareSize: number;
 };
 
+// Piece → PNG asset (public/pieces) and unicode fallback. Hoisted to module
+// scope so they are allocated once, not rebuilt on every Piece render.
+const PIECE_IMAGES: Record<string, string> = {
+  wK: "white-king.png",
+  wQ: "white-queen.png",
+  wR: "white-rook.png",
+  wB: "white-bishop.png",
+  wN: "white-knight.png",
+  wP: "white-pawn.png",
+  bK: "black-king.png",
+  bQ: "black-queen.png",
+  bR: "black-rook.png",
+  bB: "black-bishop.png",
+  bN: "black-knight.png",
+  bP: "black-pawn.png",
+};
+
+const PIECE_SYMBOLS: Record<string, string> = {
+  wK: "♔",
+  wQ: "♕",
+  wR: "♖",
+  wB: "♗",
+  wN: "♘",
+  wP: "♙",
+  bK: "♚",
+  bQ: "♛",
+  bR: "♜",
+  bB: "♝",
+  bN: "♞",
+  bP: "♟",
+};
+
+const PIECE_IMAGE_PATHS = Object.values(PIECE_IMAGES).map((f) => `/pieces/${f}`);
+
+function pieceImagePath(piece: string): string | null {
+  const filename = PIECE_IMAGES[piece];
+  return filename ? `/pieces/${filename}` : null;
+}
+
 const Piece = React.memo(function Piece({ piece }: PieceProps) {
+  // The bundled PNGs are static assets that essentially never 404 in
+  // production; we keep a one-way error latch for the unicode fallback but no
+  // longer run a reset effect on every piece change (that effect fired an extra
+  // commit on every capture/replacement).
   const [imageError, setImageError] = useState(false);
-  
-  // Map pieces to image filenames (PNG assets in public/pieces)
-  // Normal mapping: white pieces render white images and black pieces render black images
-  const pieceImages: { [key: string]: string } = {
-    wK: "white-king.png",
-    wQ: "white-queen.png",
-    wR: "white-rook.png",
-    wB: "white-bishop.png",
-    wN: "white-knight.png",
-    wP: "white-pawn.png",
-    bK: "black-king.png",
-    bQ: "black-queen.png",
-    bR: "black-rook.png",
-    bB: "black-bishop.png",
-    bN: "black-knight.png",
-    bP: "black-pawn.png",
-  };
-  
-  const pieceSymbols: { [key: string]: string } = {
-    wK: "♔",
-    wQ: "♕",
-    wR: "♖",
-    wB: "♗",
-    wN: "♘",
-    wP: "♙",
-    bK: "♚",
-    bQ: "♛",
-    bR: "♜",
-    bB: "♝",
-    bN: "♞",
-    bP: "♟",
-  };
-
-  // Try different image path approaches
-  const getImagePath = () => {
-    const filename = pieceImages[piece];
-    if (!filename) return null;
-    
-    // For production, try the direct path
-    return `/pieces/${filename}`;
-  };
-
-  const imagePath = getImagePath();
+  const imagePath = pieceImagePath(piece);
   const color = piece[0] === "w" ? "text-white" : "text-gray-300";
 
-  // Reset error state when piece changes
-  useEffect(() => {
-    setImageError(false);
-  }, [piece]);
-
-  // Handle image loading
-  const handleImageLoad = () => {
-    setImageError(false);
-  };
-
-  const handleImageError = () => {
-    setImageError(true);
-  };
-
-  // Always try to load image first, fallback to symbol if error
   return (
     <div className="flex h-full w-full touch-none select-none items-center justify-center pointer-events-none">
       {!imageError && imagePath ? (
@@ -156,12 +142,12 @@ const Piece = React.memo(function Piece({ piece }: PieceProps) {
           className="chess-piece-image max-h-full max-w-full touch-none object-contain"
           data-color={piece[0] === "w" ? "white" : "black"}
           draggable={false}
-          onError={handleImageError}
-          onLoad={handleImageLoad}
+          decoding="async"
+          onError={() => setImageError(true)}
         />
       ) : (
         <div className={`chess-piece-fallback touch-none text-4xl font-bold ${color}`}>
-          {pieceSymbols[piece] || ""}
+          {PIECE_SYMBOLS[piece] || ""}
         </div>
       )}
     </div>
@@ -219,12 +205,16 @@ const Square = React.memo(function Square({
   onConfirmMove,
 }: SquareProps) {
   const [hovered, setHovered] = useState(false);
-  const { currentTheme } = useChessTheme();
 
-  // Use theme colors instead of hardcoded ones
-  const baseColor = isLight ? currentTheme.lightSquare : currentTheme.darkSquare;
-  const hoverColor = isLight ? currentTheme.lightHover : currentTheme.darkHover;
-  const coordColor = isLight ? currentTheme.lightCoord : currentTheme.darkCoord;
+  // Colors come from the [data-chess-theme] CSS variables set on <html> before
+  // paint (see themeVarsCss + the root layout). Reading them as static var()
+  // strings instead of from context means Square no longer subscribes to the
+  // theme context: all 64 squares stop re-rendering on a theme change (the
+  // browser just re-resolves the variables) and React.memo can fully shield
+  // unchanged squares during play.
+  const baseColor = isLight ? "var(--sq-light)" : "var(--sq-dark)";
+  const hoverColor = isLight ? "var(--sq-light-hover)" : "var(--sq-dark-hover)";
+  const coordColor = isLight ? "var(--coord-on-light)" : "var(--coord-on-dark)";
 
   const squareClasses = [
     "chess-square-large flex items-center justify-center relative cursor-pointer transition-colors duration-100",
@@ -236,7 +226,7 @@ const Square = React.memo(function Square({
       <div
         key="last"
         className="absolute inset-0 pointer-events-none"
-        style={{ backgroundColor: currentTheme.lastMoveHighlight }}
+        style={{ backgroundColor: "var(--last-move)" }}
       />,
     );
   }
@@ -245,7 +235,7 @@ const Square = React.memo(function Square({
       <div
         key="hl"
         className="absolute inset-0 pointer-events-none"
-        style={{ backgroundColor: currentTheme.moveHighlight }}
+        style={{ backgroundColor: "var(--move-hint)" }}
       />,
     );
   }
@@ -254,7 +244,7 @@ const Square = React.memo(function Square({
       <div
         key="check"
         className="absolute inset-0 pointer-events-none"
-        style={{ backgroundColor: currentTheme.checkHighlight }}
+        style={{ backgroundColor: "var(--check-highlight)" }}
       />,
     );
   }
@@ -479,6 +469,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [moveInFlight, setMoveInFlight] = useState(false);
   const activeTurn = turnProp ?? gameState.turn;
 
+  // Warm the 12 piece PNGs as soon as a board mounts so the opening position
+  // paints without waiting on per-image network discovery.
+  useEffect(() => {
+    for (const path of PIECE_IMAGE_PATHS) {
+      preload(path, { as: "image" });
+    }
+  }, []);
+
   useEffect(() => {
     moveInFlightRef.current = false;
     setMoveInFlight(false);
@@ -553,10 +551,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fen, viewMode]);
 
-  // Play game-end sounds only when a live position transitions into a draw.
+  // Play game-end sounds only when a live position TRANSITIONS into a draw.
+  // The first effect run (mount) is always skipped so deep-linking straight
+  // into a finished/drawn position never emits a spurious end sound.
+  const gameEndArmedRef = useRef(false);
   useEffect(() => {
     const wasGameOver = previousGameOverRef.current;
     previousGameOverRef.current = gameState.gameOver;
+    if (!gameEndArmedRef.current) {
+      gameEndArmedRef.current = true;
+      return;
+    }
     if (
       gameState.gameOver &&
       !wasGameOver &&
@@ -663,6 +668,64 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     if (!settings.highlightLegalMoves || !dragState?.from) return new Set<string>();
     return new Set(chessService.getPossibleMoves(dragState.from));
   }, [chessService, dragState?.from, settings.highlightLegalMoves]);
+
+  // Static per-square layout (square id, piece, light/dark parity, edge coord
+  // labels). Memoized so the 64 getPiece() calls run only when the POSITION
+  // changes — not on every drag rAF frame. A local makeMove mutates the engine
+  // in place (same identity) but always bumps gameState.fen, so the fen is the
+  // correct recompute trigger.
+  const boardLayout = useMemo(() => {
+    const isBlackView = orientation === "black";
+    const rankRange = isBlackView
+      ? [...Array(8).keys()]
+      : [...Array(8).keys()].reverse();
+    const fileRange = isBlackView
+      ? [...Array(8).keys()].reverse()
+      : [...Array(8).keys()];
+    const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    const cells: Array<{
+      square: string;
+      piece: string | null;
+      isLight: boolean;
+      rank: number;
+      file: number;
+      fileLabel: string | null;
+      rankLabel: string | null;
+    }> = [];
+    for (const rank of rankRange) {
+      for (const file of fileRange) {
+        const square = coordsToSquare(file, rank);
+        const isLight = (rank + file) % 2 === 1;
+        const onBottomEdge = isBlackView ? rank === 7 : rank === 0;
+        const onLeftEdge = isBlackView ? file === 7 : file === 0;
+        cells.push({
+          square,
+          piece: chessService.getPiece(square),
+          isLight,
+          rank,
+          file,
+          fileLabel:
+            settings.showCoordinates && onBottomEdge ? files[file] : null,
+          rankLabel:
+            settings.showCoordinates && onLeftEdge ? String(rank + 1) : null,
+        });
+      }
+    }
+    return cells;
+    // gameState.fen is the necessary trigger: a local makeMove mutates the
+    // ChessClient in place (stable identity), so the fen is what reliably
+    // changes when the position does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.fen, chessService, orientation, settings.showCoordinates]);
+
+  // Squares of pieces currently giving check, computed once per position
+  // (previously rebuilt up to ~16 throwaway Chess instances on every render).
+  const checkingSet = useMemo(() => {
+    if (!gameState.inCheck) return new Set<string>();
+    return new Set(chessService.getCheckingPieces());
+    // gameState.fen recomputes the set when the position changes (see boardLayout).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.inCheck, gameState.fen, chessService]);
 
   const makeMove = useCallback(
     async (from: string, to: string, promotion?: string) => {
@@ -1270,38 +1333,40 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     );
     if (!el) return fallback;
 
+    // Anchor the promotion picker over the destination square, clamped to the
+    // viewport: prefer above the square, flip below when there is no room
+    // (e.g. promoting on the back rank near the top edge on mobile), and keep
+    // it horizontally on-screen.
     const rect = el.getBoundingClientRect();
-    const left = rect.left + rect.width / 2;
-    const top = Math.max(8, rect.top - 10);
+    const POPOVER_W = 300;
+    const POPOVER_H = 120;
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const left = Math.min(
+      vw - POPOVER_W / 2 - margin,
+      Math.max(POPOVER_W / 2 + margin, rect.left + rect.width / 2),
+    );
+
+    const aboveTop = rect.top - 10;
+    if (aboveTop - POPOVER_H >= margin) {
+      return { left, top: aboveTop, transform: "translate(-50%, -100%)" };
+    }
+    const belowTop = Math.min(rect.bottom + 10, vh - POPOVER_H - margin);
     return {
       left,
-      top,
-      transform: "translate(-50%, -100%)",
+      top: Math.max(margin, belowTop),
+      transform: "translate(-50%, 0)",
     };
   }, []);
 
   const renderBoard = () => {
-    const squares = [];
-    // Detailed moves no longer needed for visual indicators
-    // Keep iteration order constant (white-at-bottom); visual flip handled by wrapper
+    // Animation offset for the piece slide-in. Computed per render because it
+    // depends on the latest move; the heavy layout + check computation is
+    // memoized above. The sign flips for black orientation because the board
+    // wrapper is rotated 180°, so the delta must be board-local.
     const isBlackView = orientation === "black";
-    const rankRange = isBlackView
-      ? [...Array(8).keys()]
-      : [...Array(8).keys()].reverse();
-    const fileRange = isBlackView
-      ? [...Array(8).keys()].reverse()
-      : [...Array(8).keys()];
-    const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
-
-    // Get checking pieces if in check
-    const checkingPieces = gameState.inCheck ? chessService.getCheckingPieces() : [];
-
-    // For the piece slide animation: compute the delta from the source
-    // square to the destination square in % of a single square. We flip the
-    // sign for the black-orientation case because the parent board is rotated
-    // 180° and the piece image has its own counter-rotation; the keyframe
-    // applied (piece-slide-in-rotated) takes care of the rotation but the
-    // delta we hand it must be expressed in board-local coordinates.
     let animateTo: string | null = null;
     let animateOffset: { dx: string; dy: string } | null = null;
     if (lastMove && lastMoveAnimationEnabled) {
@@ -1309,11 +1374,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       const fromRank = parseInt(lastMove.from[1], 10) - 1;
       const toFile = lastMove.to.charCodeAt(0) - 97;
       const toRank = parseInt(lastMove.to[1], 10) - 1;
-      // White orientation, DOM coords: positive dx = right, positive dy = down.
-      // Source position relative to destination square center, in board-local
-      // coordinates:
-      //   dx = (sourceFile - targetFile) * 100%
-      //   dy = (targetRank - sourceRank) * 100%   (DOM row N+1 is rank N-1)
       const sign = isBlackView ? -1 : 1;
       const dxPct = (fromFile - toFile) * 100 * sign;
       const dyPct = (toRank - fromRank) * 100 * sign;
@@ -1321,49 +1381,21 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       animateOffset = { dx: `${dxPct}%`, dy: `${dyPct}%` };
     }
 
-    for (const rank of rankRange) {
-      for (const file of fileRange) {
-        const square = coordsToSquare(file, rank);
-        const piece = chessService.getPiece(square);
-        // Standard chess parity: a1 (file=0, rank=0) is a DARK square,
-        // h1 (file=7, rank=0) is light — "white square on white's right".
-        const isLight = (rank + file) % 2 === 1;
-        const isSelected = selectedSquare === square;
-        const isHighlighted = selectedLegalTargets.has(square);
-
+    return boardLayout.map(
+      ({ square, piece, isLight, rank, file, fileLabel, rankLabel }) => {
         const isLastMove =
           settings.highlightLastMove &&
           lastMove &&
           (lastMove.from === square || lastMove.to === square);
         const animateFrom =
           animateTo === square && animateOffset ? animateOffset : null;
-        const isDraggingSource =
-          Boolean(dragState?.dragging) && dragState?.from === square;
-        const isDragTarget = dragTargetSquare === square;
-        const isLegalDragTarget = dragLegalTargets.has(square);
-        
-        // King is in check
         const isCheck =
           gameState.inCheck &&
           piece &&
           ((piece === "wK" && activeTurn === "white") ||
             (piece === "bK" && activeTurn === "black"));
-        
-        // Piece is giving check
-        const isCheckingPiece = gameState.inCheck && checkingPieces.includes(square);
 
-        // Coordinate labels (like chess.com):
-        // Show file letter on the bottom edge, rank number on the left edge, based on viewer orientation
-        const onBottomEdge = isBlackView ? rank === 7 : rank === 0;
-        const onLeftEdge = isBlackView ? file === 7 : file === 0;
-        const fileLabel = settings.showCoordinates && onBottomEdge
-          ? files[file]
-          : null;
-        const rankLabel = settings.showCoordinates && onLeftEdge
-          ? String(rank + 1)
-          : null;
-
-        squares.push(
+        return (
           <Square
             key={square}
             square={square}
@@ -1371,27 +1403,27 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             file={file}
             piece={piece}
             isLight={isLight}
-            isSelected={isSelected}
-            isHighlighted={isHighlighted}
+            isSelected={selectedSquare === square}
+            isHighlighted={selectedLegalTargets.has(square)}
             isLastMove={Boolean(isLastMove)}
             isCheck={Boolean(isCheck)}
-            isCheckingPiece={Boolean(isCheckingPiece)}
+            isCheckingPiece={gameState.inCheck && checkingSet.has(square)}
             onSquareClick={handleSquareClick}
             onSquarePointerDown={handleSquarePointerDown}
             fileLabel={fileLabel}
             rankLabel={rankLabel}
             animateFrom={animateFrom}
-            isDraggingSource={isDraggingSource}
-            isDragTarget={isDragTarget}
-            isLegalDragTarget={isLegalDragTarget}
+            isDraggingSource={
+              Boolean(dragState?.dragging) && dragState?.from === square
+            }
+            isDragTarget={dragTargetSquare === square}
+            isLegalDragTarget={dragLegalTargets.has(square)}
             isConfirmTarget={confirmMove?.to === square}
             onConfirmMove={confirmQueuedMove}
-          />,
+          />
         );
-      }
-    }
-
-    return squares;
+      },
+    );
   };
 
   return (
