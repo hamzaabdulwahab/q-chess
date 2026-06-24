@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/game-maintenance",
-      "schedule": "* * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
