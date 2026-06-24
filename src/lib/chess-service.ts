@@ -181,8 +181,16 @@ export class ChessService {
         "status, winner, ended_at, result_reason, pending_draw_offer_by, last_move_at, updated_at, white_time_left_ms, black_time_left_ms",
       );
 
+    // Finalization is a best-effort, opportunistic side effect of a read. If the
+    // UPDATE fails — e.g. the target status ('aborted'/'abandoned') isn't yet in
+    // the DB's check constraint because migration 0011/0013 hasn't been applied —
+    // it must NOT turn a game read into a 500 that blocks loading and playing.
+    // Log and fall back to the un-finalized state instead of throwing.
     if (error) {
-      throw new Error(error.message);
+      console.warn(
+        `[games] finalizeExpiredTimedGame skipped for game ${row.id}: ${error.message}`,
+      );
+      return null;
     }
 
     return data?.[0] ?? null;
@@ -292,7 +300,13 @@ export class ChessService {
         .select("id, status, winner, result_reason");
 
       if (updateError) {
-        throw new Error(updateError.message);
+        // Don't let one un-finalizable row (e.g. a status value missing from the
+        // DB check constraint) abort the entire maintenance sweep — log and move
+        // on so the remaining stale games are still resolved.
+        console.warn(
+          `[games] maintenance finalize skipped for game ${row.id}: ${updateError.message}`,
+        );
+        continue;
       }
 
       const updated = updatedRows?.[0] as
